@@ -1,0 +1,55 @@
+services:
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.4
+    container_name: keycloak
+
+    command:
+      - start-dev
+      - --import-realm
+      - --http-port=8080
+      - --hostname=http://localhost:8080
+
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin123
+
+    ports:
+      - "8080:8080"
+
+    volumes:
+      # Keycloak 실제 데이터 저장
+      - keycloak_data:/opt/keycloak/data
+
+      # Realm 자동 import
+      - ./keycloak/hdaic-realm.json:/opt/keycloak/data/import/hdaic-realm.json:ro
+
+
+  api:
+    build: ./api
+    container_name: usage-api
+
+    environment:
+
+      # Docker 내부에서 Keycloak에 접근
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+
+      # JWT의 iss claim
+      KEYCLOAK_ISSUER: http://localhost:8080/realms/hdaic
+
+      # Realm
+      KEYCLOAK_REALM: hdaic
+
+      # JWT aud claim
+      KEYCLOAK_CLIENT_ID: usage-api
+
+    ports:
+      - "8000:8000"
+
+    depends_on:
+      - keycloak
+
+
+volumes:
+
+  keycloak_data:

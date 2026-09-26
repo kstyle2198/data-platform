@@ -1,0 +1,92 @@
+{
+  "realm": "hdaic",
+  "enabled": true,
+
+  "displayName": "HDAIC Lab",
+
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": true,
+
+  "roles": {
+    "realm": [
+      {
+        "name": "user",
+        "description": "Normal application user"
+      }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "usage-api",
+
+      "name": "Usage API",
+
+      "enabled": true,
+
+      "protocol": "openid-connect",
+
+      "publicClient": true,
+
+      "bearerOnly": false,
+
+      "standardFlowEnabled": true,
+
+      "directAccessGrantsEnabled": true,
+
+      "serviceAccountsEnabled": false,
+
+      "frontchannelLogout": true,
+
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:8000/*"
+      },
+
+      "protocolMappers": [
+        {
+          "name": "usage-api-audience",
+
+          "protocol": "openid-connect",
+
+          "protocolMapper": "oidc-audience-mapper",
+
+          "config": {
+            "included.client.audience": "usage-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "lightweight.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+
+  "users": [
+    {
+      "username": "kim",
+
+      "enabled": true,
+
+      "firstName": "Kim",
+
+      "lastName": "Style",
+
+      "email": "kim@example.com",
+
+      "emailVerified": true,
+
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test1234",
+          "temporary": false
+        }
+      ],
+
+      "realmRoles": [
+        "user"
+      ]
+    }
+  ]
+}
