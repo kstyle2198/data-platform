@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Usage Management System</title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family:
+                Arial,
+                sans-serif;
+
+            background: #f4f6f8;
+            color: #222;
+        }
+
+        .container {
+            width: 900px;
+            max-width: 95%;
+
+            margin: 40px auto;
+        }
+
+        .header {
+            background: #1f2937;
+            color: white;
+
+            padding: 24px;
+
+            border-radius: 12px 12px 0 0;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .header p {
+            margin:
+                8px 0 0 0;
+
+            color: #d1d5db;
+        }
+
+        .card {
+            background: white;
+
+            padding: 24px;
+
+            margin-top: 16px;
+
+            border-radius: 12px;
+
+            box-shadow:
+                0 2px 8px
+                rgba(0,0,0,0.08);
+        }
+
+        .card h2 {
+            margin-top: 0;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+
+            margin-bottom: 6px;
+
+            font-weight: bold;
+        }
+
+        input,
+        select {
+
+            width: 100%;
+
+            padding: 10px;
+
+            border: 1px solid #d1d5db;
+
+            border-radius: 6px;
+
+            font-size: 15px;
+        }
+
+        button {
+
+            border: none;
+
+            padding: 11px 18px;
+
+            border-radius: 6px;
+
+            background: #2563eb;
+
+            color: white;
+
+            font-size: 15px;
+
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        button.logout {
+            background: #6b7280;
+        }
+
+        .user-info {
+
+            display: flex;
+
+            justify-content:
+                space-between;
+
+            align-items: center;
+
+            background: #eff6ff;
+
+            padding: 14px;
+
+            border-radius: 8px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .status {
+
+            margin-top: 15px;
+
+            padding: 12px;
+
+            border-radius: 6px;
+
+            background: #f3f4f6;
+        }
+
+        .success {
+            background: #ecfdf5;
+            color: #065f46;
+        }
+
+        .error {
+            background: #fef2f2;
+            color: #991b1b;
+        }
+
+        .event {
+
+            background: #111827;
+
+            color: #e5e7eb;
+
+            padding: 18px;
+
+            border-radius: 8px;
+
+            font-family:
+                Consolas,
+                monospace;
+
+            white-space: pre-wrap;
+        }
+
+        .login-card {
+            max-width: 500px;
+
+            margin: 40px auto;
+        }
+
+        .login-card h2 {
+            text-align: center;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<div class="container">
+
+
+    <!-- ================================================= -->
+    <!-- Header -->
+    <!-- ================================================= -->
+
+    <div class="header">
+
+        <h1>
+            Usage Management System
+        </h1>
+
+        <p>
+            Keycloak + FastAPI + Kafka
+        </p>
+
+    </div>
+
+
+    <!-- ================================================= -->
+    <!-- Login -->
+    <!-- ================================================= -->
+
+    <div
+        id="loginSection"
+        class="card login-card"
+    >
+
+        <h2>
+            Login
+        </h2>
+
+
+        <div class="form-group">
+
+            <label>
+                Username
+            </label>
+
+            <input
+                id="username"
+                type="text"
+                value="kim"
+                placeholder="Username"
+            >
+
+        </div>
+
+
+        <div class="form-group">
+
+            <label>
+                Password
+            </label>
+
+            <input
+                id="password"
+                type="password"
+                value="test1234"
+                placeholder="Password"
+            >
+
+        </div>
+
+
+        <button
+            onclick="login()"
+        >
+            Login
+        </button>
+
+
+        <div
+            id="loginStatus"
+            class="status hidden"
+        ></div>
+
+    </div>
+
+
+    <!-- ================================================= -->
+    <!-- Main Application -->
+    <!-- ================================================= -->
+
+    <div
+        id="appSection"
+        class="hidden"
+    >
+
+
+        <!-- User -->
+
+        <div class="card">
+
+            <div class="user-info">
+
+                <div>
+
+                    👤 Logged in:
+
+                    <strong
+                        id="loggedUser"
+                    >
+                    </strong>
+
+                </div>
+
+
+                <button
+                    class="logout"
+                    onclick="logout()"
+                >
+                    Logout
+                </button>
+
+            </div>
+
+        </div>
+
+
+        <!-- Usage -->
+
+        <div class="card">
+
+            <h2>
+                Register Usage
+            </h2>
+
+
+            <div class="form-group">
+
+                <label>
+                    Service
+                </label>
+
+                <select id="service">
+
+                    <option value="api">
+                        API
+                    </option>
+
+                    <option value="search">
+                        Search
+                    </option>
+
+                    <option value="storage">
+                        Storage
+                    </option>
+
+                    <option value="llm">
+                        LLM
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Usage Type
+                </label>
+
+                <select id="usageType">
+
+                    <option value="request">
+                        Request
+                    </option>
+
+                    <option value="token">
+                        Token
+                    </option>
+
+                    <option value="gb">
+                        GB
+                    </option>
+
+                    <option value="minute">
+                        Minute
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    Quantity
+                </label>
+
+                <input
+                    id="quantity"
+                    type="number"
+                    value="10"
+                    min="1"
+                >
+
+            </div>
+
+
+            <button
+                onclick="submitUsage()"
+            >
+                Submit Usage
+            </button>
+
+
+            <div
+                id="usageStatus"
+                class="status hidden"
+            ></div>
+
+        </div>
+
+
+        <!-- Last Event -->
+
+        <div class="card">
+
+            <h2>
+                Last Kafka Event
+            </h2>
+
+            <div
+                id="eventResult"
+                class="event"
+            >
+No event yet.
+            </div>
+
+        </div>
+
+
+    </div>
+
+
+</div>
+
+
+<script>
+
+
+// ========================================================
+// Token
+// ========================================================
+
+let accessToken =
+    localStorage.getItem(
+        "access_token"
+    );
+
+
+// ========================================================
+// Login
+// ========================================================
+
+async function login() {
+
+    const username =
+        document
+            .getElementById(
+                "username"
+            )
+            .value;
+
+    const password =
+        document
+            .getElementById(
+                "password"
+            )
+            .value;
+
+
+    const status =
+        document
+            .getElementById(
+                "loginStatus"
+            );
+
+
+    status.className =
+        "status";
+
+    status.innerText =
+        "Logging in...";
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/login",
+                {
+
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        username:
+                            username,
+
+                        password:
+                            password
+                    })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.detail ||
+                "Login failed"
+            );
+        }
+
+
+        accessToken =
+            data.access_token;
+
+
+        localStorage.setItem(
+            "access_token",
+            accessToken
+        );
+
+
+        await loadUser();
+
+
+    } catch (error) {
+
+        status.className =
+            "status error";
+
+        status.innerText =
+            error.message;
+    }
+}
+
+
+// ========================================================
+// Load User
+// ========================================================
+
+async function loadUser() {
+
+    try {
+
+        const response =
+            await fetch(
+                "/me",
+                {
+
+                    headers: {
+                        "Authorization":
+                            "Bearer " +
+                            accessToken
+                    }
+                }
+            );
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                "Token verification failed"
+            );
+        }
+
+
+        const user =
+            await response.json();
+
+
+        document
+            .getElementById(
+                "loggedUser"
+            )
+            .innerText =
+                user.username;
+
+
+        document
+            .getElementById(
+                "loginSection"
+            )
+            .classList
+            .add("hidden");
+
+
+        document
+            .getElementById(
+                "appSection"
+            )
+            .classList
+            .remove("hidden");
+
+
+    } catch (error) {
+
+        logout();
+
+    }
+}
+
+
+// ========================================================
+// Submit Usage
+// ========================================================
+
+async function submitUsage() {
+
+    const service =
+        document
+            .getElementById(
+                "service"
+            )
+            .value;
+
+
+    const usageType =
+        document
+            .getElementById(
+                "usageType"
+            )
+            .value;
+
+
+    const quantity =
+        Number(
+            document
+                .getElementById(
+                    "quantity"
+                )
+                .value
+        );
+
+
+    const status =
+        document
+            .getElementById(
+                "usageStatus"
+            );
+
+
+    status.className =
+        "status";
+
+    status.innerText =
+        "Sending usage event...";
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/usage",
+                {
+
+                    method: "POST",
+
+                    headers: {
+
+                        "Authorization":
+                            "Bearer " +
+                            accessToken,
+
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        service:
+                            service,
+
+                        usage_type:
+                            usageType,
+
+                        quantity:
+                            quantity
+                    })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.detail ||
+                "Usage submission failed"
+            );
+        }
+
+
+        status.className =
+            "status success";
+
+        status.innerText =
+            "Usage event sent to Kafka.";
+
+
+        document
+            .getElementById(
+                "eventResult"
+            )
+            .innerText =
+                JSON.stringify(
+                    data,
+                    null,
+                    2
+                );
+
+
+    } catch (error) {
+
+        status.className =
+            "status error";
+
+        status.innerText =
+            error.message;
+    }
+}
+
+
+// ========================================================
+// Logout
+// ========================================================
+
+function logout() {
+
+    accessToken = null;
+
+    localStorage.removeItem(
+        "access_token"
+    );
+
+
+    document
+        .getElementById(
+            "appSection"
+        )
+        .classList
+        .add("hidden");
+
+
+    document
+        .getElementById(
+            "loginSection"
+        )
+        .classList
+        .remove("hidden");
+}
+
+
+// ========================================================
+// Page Load
+// ========================================================
+
+if (accessToken) {
+
+    loadUser();
+
+}
+
+
+</script>
+
+
+</body>
+
+</html>
