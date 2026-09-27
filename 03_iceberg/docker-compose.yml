@@ -1,0 +1,252 @@
+services:
+
+  # ==========================================================
+  # Keycloak
+  # ==========================================================
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.4
+    container_name: keycloak
+
+    command:
+      - start-dev
+      - --import-realm
+
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin123
+
+      # JWT issuer를 외부 접속 주소로 고정
+      KC_HOSTNAME: http://localhost:8080
+
+    ports:
+      - "8080:8080"
+
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+      - ./keycloak:/opt/keycloak/data/import
+
+    restart: unless-stopped
+
+
+  # ==========================================================
+  # Kafka
+  # ==========================================================
+
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: kafka
+
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+
+      KAFKA_LISTENERS: >
+        PLAINTEXT://:9092,
+        CONTROLLER://:9093
+
+      KAFKA_ADVERTISED_LISTENERS: >
+        PLAINTEXT://kafka:9092
+
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: >
+        CONTROLLER:PLAINTEXT,
+        PLAINTEXT:PLAINTEXT
+
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+      KAFKA_NUM_PARTITIONS: 3
+
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+    ports:
+      - "9092:9092"
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"
+        ]
+
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+    restart: unless-stopped
+
+
+  # ==========================================================
+  # Kafka Topic Initialization
+  # ==========================================================
+
+  kafka-init:
+    image: apache/kafka:3.9.0
+    container_name: kafka-init
+
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+    entrypoint:
+      - /bin/bash
+      - -c
+
+    command: >
+      "
+      /opt/kafka/bin/kafka-topics.sh
+      --bootstrap-server kafka:9092
+      --create
+      --if-not-exists
+      --topic usage-events
+      --partitions 3
+      --replication-factor 1
+      &&
+      /opt/kafka/bin/kafka-topics.sh
+      --bootstrap-server kafka:9092
+      --create
+      --if-not-exists
+      --topic pipeline-status
+      --partitions 3
+      --replication-factor 1
+      &&
+      echo 'Kafka topics ready'
+      "
+
+
+  # ==========================================================
+  # FastAPI
+  # ==========================================================
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+
+    image: local/usage-api:latest
+
+    container_name: api
+
+    environment:
+
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+
+      KEYCLOAK_ISSUER: http://localhost:8080/realms/hdaic
+
+      KEYCLOAK_REALM: hdaic
+
+      KEYCLOAK_CLIENT_ID: usage-api
+
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+      KAFKA_TOPIC: usage-events
+
+      PIPELINE_STATUS_TOPIC: pipeline-status
+
+      MAX_PIPELINE_EVENTS: 100
+
+    ports:
+      - "8000:8000"
+
+    depends_on:
+
+      keycloak:
+        condition: service_started
+
+      kafka:
+        condition: service_healthy
+
+      kafka-init:
+        condition: service_completed_successfully
+
+    restart: unless-stopped
+
+
+  # ==========================================================
+  # MinIO
+  # ==========================================================
+
+  minio:
+    build:
+      context: ./minio
+      dockerfile: Dockerfile
+
+    image: local/minio-community:latest
+
+    container_name: minio
+
+    environment:
+
+      MINIO_ROOT_USER: minioadmin
+
+      MINIO_ROOT_PASSWORD: minioadmin123
+
+    command:
+      - server
+      - /data
+      - --console-address
+      - ":9001"
+
+    ports:
+      - "9000:9000"
+      - "9002:9001"
+
+    volumes:
+      - minio_data:/data
+
+    restart: unless-stopped
+
+
+  # ==========================================================
+  # Spark + Iceberg
+  # ==========================================================
+
+  spark:
+    build:
+      context: ./spark
+      dockerfile: Dockerfile
+
+    image: local/spark-iceberg:3.5.7
+
+    container_name: spark
+
+    command:
+      - tail
+      - -f
+      - /dev/null
+
+    volumes:
+      - ./spark:/opt/spark/work
+
+    depends_on:
+
+      kafka:
+        condition: service_healthy
+
+      minio:
+        condition: service_started
+
+    restart: unless-stopped
+
+
+# ============================================================
+# Volumes
+# ============================================================
+
+volumes:
+
+  keycloak_data:
+
+  minio_data:

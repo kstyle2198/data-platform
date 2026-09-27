@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Usage Pipeline Monitor</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family:
+                Inter,
+                "Noto Sans KR",
+                Arial,
+                sans-serif;
+            background: #f4f6f8;
+            color: #17202a;
+        }
+
+        header {
+            background: #111827;
+            color: white;
+            padding: 18px 28px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 22px;
+        }
+
+        header p {
+            margin: 6px 0 0;
+            opacity: .75;
+            font-size: 13px;
+        }
+
+        main {
+            max-width: 1400px;
+            margin: 24px auto;
+            padding: 0 18px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns:
+                330px
+                1fr;
+            gap: 18px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 14px;
+            padding: 20px;
+            box-shadow:
+                0 2px 10px rgba(0,0,0,.06);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            font-size: 17px;
+        }
+
+        label {
+            display: block;
+            margin-top: 14px;
+            margin-bottom: 6px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        input,
+        select,
+        button {
+            width: 100%;
+            padding: 11px;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            font-size: 14px;
+        }
+
+        button {
+            margin-top: 16px;
+            background: #111827;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 700;
+        }
+
+        button:hover {
+            opacity: .9;
+        }
+
+        button.secondary {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        .login-status {
+            margin-top: 10px;
+            font-size: 13px;
+        }
+
+        .event-box {
+            margin-top: 18px;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 8px;
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        .pipeline {
+            display: grid;
+            grid-template-columns:
+                repeat(5, 1fr);
+            gap: 8px;
+            margin-top: 20px;
+        }
+
+        .stage {
+            position: relative;
+            text-align: center;
+            padding: 16px 8px;
+            border-radius: 12px;
+            background: #f1f5f9;
+            border: 2px solid #e2e8f0;
+        }
+
+        .stage:not(:last-child)::after {
+            content: "→";
+            position: absolute;
+            right: -17px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #94a3b8;
+            font-weight: bold;
+            z-index: 2;
+        }
+
+        .stage .icon {
+            font-size: 25px;
+        }
+
+        .stage .name {
+            margin-top: 7px;
+            font-weight: 700;
+            font-size: 13px;
+        }
+
+        .stage .detail {
+            margin-top: 7px;
+            font-size: 11px;
+            color: #64748b;
+            min-height: 30px;
+        }
+
+        .stage.completed {
+            border-color: #22c55e;
+            background: #f0fdf4;
+        }
+
+        .stage.processing {
+            border-color: #f59e0b;
+            background: #fffbeb;
+        }
+
+        .stage.failed {
+            border-color: #ef4444;
+            background: #fef2f2;
+        }
+
+        .stage.waiting {
+            opacity: .65;
+        }
+
+        .event-info {
+            display: grid;
+            grid-template-columns:
+                repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .metric {
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 12px;
+        }
+
+        .metric .label {
+            margin: 0;
+            color: #64748b;
+            font-size: 11px;
+        }
+
+        .metric .value {
+            margin-top: 5px;
+            font-size: 14px;
+            font-weight: 700;
+            word-break: break-all;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+        }
+
+        th {
+            background: #f8fafc;
+        }
+
+        .status {
+            font-weight: 700;
+        }
+
+        .status.completed {
+            color: #16a34a;
+        }
+
+        .status.processing {
+            color: #d97706;
+        }
+
+        .status.failed {
+            color: #dc2626;
+        }
+
+        .status.waiting {
+            color: #64748b;
+        }
+
+        .muted {
+            color: #64748b;
+            font-size: 12px;
+        }
+
+        pre {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        @media (max-width: 1000px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .pipeline {
+                grid-template-columns: 1fr;
+            }
+
+            .stage:not(:last-child)::after {
+                content: "↓";
+                right: 50%;
+                top: auto;
+                bottom: -22px;
+                transform: translateX(50%);
+            }
+
+            .event-info {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h1>Usage Data Pipeline Monitor</h1>
+    <p>
+        Keycloak → FastAPI → Kafka → Spark → Iceberg → MinIO
+    </p>
+</header>
+
+<main>
+
+    <div class="grid">
+
+        <!-- ================================================= -->
+        <!-- Login / Event -->
+        <!-- ================================================= -->
+
+        <section>
+
+            <div class="card">
+
+                <h2>1. Login</h2>
+
+                <label>Username</label>
+                <input
+                    id="username"
+                    value="kim"
+                >
+
+                <label>Password</label>
+                <input
+                    id="password"
+                    type="password"
+                    value="test1234"
+                >
+
+                <button onclick="login()">
+                    Keycloak Login
+                </button>
+
+                <div
+                    id="loginStatus"
+                    class="login-status"
+                >
+                    로그인이 필요합니다.
+                </div>
+
+            </div>
+
+
+            <div class="card">
+
+                <h2>2. Event 발행</h2>
+
+                <label>Service</label>
+
+                <select id="service">
+                    <option value="api">api</option>
+                    <option value="search">search</option>
+                    <option value="storage">storage</option>
+                    <option value="llm">llm</option>
+                </select>
+
+
+                <label>Usage Type</label>
+
+                <select id="usageType">
+                    <option value="request">request</option>
+                    <option value="token">token</option>
+                    <option value="gb">gb</option>
+                    <option value="minute">minute</option>
+                </select>
+
+
+                <label>Quantity</label>
+
+                <input
+                    id="quantity"
+                    type="number"
+                    min="1"
+                    value="10"
+                >
+
+
+                <button onclick="publishEvent()">
+                    이벤트 발행
+                </button>
+
+                <button
+                    class="secondary"
+                    onclick="logout()"
+                >
+                    Logout
+                </button>
+
+                <div
+                    id="eventMessage"
+                    class="event-box"
+                >
+                    이벤트를 발행하면
+                    Pipeline 상태가 표시됩니다.
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ================================================= -->
+        <!-- Pipeline -->
+        <!-- ================================================= -->
+
+        <section>
+
+            <div class="card">
+
+                <h2>3. Pipeline Monitor</h2>
+
+                <div
+                    id="currentEvent"
+                    class="muted"
+                >
+                    현재 추적 중인 이벤트가 없습니다.
+                </div>
+
+
+                <div
+                    id="pipeline"
+                    class="pipeline"
+                >
+
+                    <div
+                        class="stage waiting"
+                        id="stage-fastapi"
+                    >
+                        <div class="icon">○</div>
+                        <div class="name">FastAPI</div>
+                        <div class="detail">
+                            Waiting
+                        </div>
+                    </div>
+
+
+                    <div
+                        class="stage waiting"
+                        id="stage-kafka"
+                    >
+                        <div class="icon">○</div>
+                        <div class="name">Kafka</div>
+                        <div class="detail">
+                            Waiting
+                        </div>
+                    </div>
+
+
+                    <div
+                        class="stage waiting"
+                        id="stage-spark"
+                    >
+                        <div class="icon">○</div>
+                        <div class="name">Spark</div>
+                        <div class="detail">
+                            Waiting
+                        </div>
+                    </div>
+
+
+                    <div
+                        class="stage waiting"
+                        id="stage-iceberg"
+                    >
+                        <div class="icon">○</div>
+                        <div class="name">Iceberg</div>
+                        <div class="detail">
+                            Waiting
+                        </div>
+                    </div>
+
+
+                    <div
+                        class="stage waiting"
+                        id="stage-minio"
+                    >
+                        <div class="icon">○</div>
+                        <div class="name">MinIO</div>
+                        <div class="detail">
+                            Waiting
+                        </div>
+                    </div>
+
+                </div>
+
+
+                <div
+                    id="eventInfo"
+                    class="event-info"
+                ></div>
+
+            </div>
+
+
+            <div class="card">
+
+                <h2>4. Recent Events</h2>
+
+                <div id="recentEvents">
+                    <span class="muted">
+                        이벤트가 없습니다.
+                    </span>
+                </div>
+
+            </div>
+
+
+            <div class="card">
+
+                <h2>5. Raw Pipeline JSON</h2>
+
+                <pre id="rawData">
+아직 데이터가 없습니다.
+                </pre>
+
+            </div>
+
+        </section>
+
+    </div>
+
+</main>
+
+
+<script>
+
+let accessToken = localStorage.getItem(
+    "access_token"
+);
+
+let monitorTimer = null;
+
+
+/* ==========================================================
+   Utility
+   ========================================================== */
+
+function authHeaders() {
+
+    return {
+        "Content-Type": "application/json",
+        "Authorization":
+            `Bearer ${accessToken}`
+    };
+}
+
+
+function statusIcon(status) {
+
+    if (status === "completed") {
+        return "✓";
+    }
+
+    if (status === "processing") {
+        return "●";
+    }
+
+    if (status === "failed") {
+        return "✗";
+    }
+
+    return "○";
+}
+
+
+function escapeHtml(value) {
+
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+
+/* ==========================================================
+   Login
+   ========================================================== */
+
+async function login() {
+
+    const username =
+        document.getElementById(
+            "username"
+        ).value;
+
+    const password =
+        document.getElementById(
+            "password"
+        ).value;
+
+    const response = await fetch(
+        "/login",
+        {
+            method: "POST",
+            headers: {
+                "Content-Type":
+                    "application/json"
+            },
+            body: JSON.stringify({
+                username,
+                password
+            })
+        }
+    );
+
+    const data =
+        await response.json();
+
+    if (!response.ok) {
+
+        document.getElementById(
+            "loginStatus"
+        ).textContent =
+            `Login 실패: ${data.detail}`;
+
+        return;
+    }
+
+    accessToken =
+        data.access_token;
+
+    localStorage.setItem(
+        "access_token",
+        accessToken
+    );
+
+    document.getElementById(
+        "loginStatus"
+    ).textContent =
+        "✓ Keycloak 로그인 성공";
+
+    loadRecentEvents();
+}
+
+
+/* ==========================================================
+   Logout
+   ========================================================== */
+
+function logout() {
+
+    localStorage.removeItem(
+        "access_token"
+    );
+
+    accessToken = null;
+
+    document.getElementById(
+        "loginStatus"
+    ).textContent =
+        "로그아웃되었습니다.";
+}
+
+
+/* ==========================================================
+   Publish event
+   ========================================================== */
+
+async function publishEvent() {
+
+    if (!accessToken) {
+
+        alert(
+            "먼저 Keycloak 로그인하세요."
+        );
+
+        return;
+    }
+
+    const service =
+        document.getElementById(
+            "service"
+        ).value;
+
+    const usageType =
+        document.getElementById(
+            "usageType"
+        ).value;
+
+    const quantity =
+        Number(
+            document.getElementById(
+                "quantity"
+            ).value
+        );
+
+    const response = await fetch(
+        "/usage",
+        {
+            method: "POST",
+            headers: authHeaders(),
+            body: JSON.stringify({
+                service,
+                usage_type: usageType,
+                quantity
+            })
+        }
+    );
+
+    const data =
+        await response.json();
+
+    if (!response.ok) {
+
+        document.getElementById(
+            "eventMessage"
+        ).textContent =
+            `이벤트 발행 실패: ${data.detail}`;
+
+        return;
+    }
+
+    const eventId =
+        data.event_id;
+
+    document.getElementById(
+        "eventMessage"
+    ).innerHTML =
+        `<b>✓ 이벤트 발행 성공</b><br>
+         Event ID: ${escapeHtml(eventId)}<br>
+         Kafka: ${escapeHtml(data.kafka.topic)}
+         /
+         partition ${data.kafka.partition}
+         /
+         offset ${data.kafka.offset}`;
+
+    startMonitoring(eventId);
+}
+
+
+/* ==========================================================
+   Monitor
+   ========================================================== */
+
+function startMonitoring(eventId) {
+
+    if (monitorTimer) {
+        clearInterval(
+            monitorTimer
+        );
+    }
+
+    loadPipeline(eventId);
+
+    monitorTimer =
+        setInterval(
+            () => loadPipeline(eventId),
+            1000
+        );
+}
+
+
+async function loadPipeline(eventId) {
+
+    if (!accessToken) {
+        return;
+    }
+
+    const response = await fetch(
+        `/pipeline/${eventId}`,
+        {
+            headers: authHeaders()
+        }
+    );
+
+    if (!response.ok) {
+        return;
+    }
+
+    const data =
+        await response.json();
+
+    renderPipeline(data);
+
+    loadRecentEvents();
+
+    const completed =
+        [
+            "fastapi",
+            "kafka",
+            "spark",
+            "iceberg",
+            "minio"
+        ].every(
+            stage =>
+                data[stage].status ===
+                "completed"
+        );
+
+    const failed =
+        [
+            "fastapi",
+            "kafka",
+            "spark",
+            "iceberg",
+            "minio"
+        ].some(
+            stage =>
+                data[stage].status ===
+                "failed"
+        );
+
+    if (completed || failed) {
+
+        clearInterval(
+            monitorTimer
+        );
+
+        monitorTimer = null;
+    }
+}
+
+
+/* ==========================================================
+   Render pipeline
+   ========================================================== */
+
+function renderPipeline(data) {
+
+    document.getElementById(
+        "currentEvent"
+    ).innerHTML =
+        `<b>Event ID:</b>
+         ${escapeHtml(data.event_id)}
+         &nbsp;&nbsp;
+         <span class="muted">
+         ${escapeHtml(data.created_at)}
+         </span>`;
+
+
+    const stages = [
+        "fastapi",
+        "kafka",
+        "spark",
+        "iceberg",
+        "minio"
+    ];
+
+
+    stages.forEach(
+        stage => {
+
+            const element =
+                document.getElementById(
+                    `stage-${stage}`
+                );
+
+            const info =
+                data[stage];
+
+            const status =
+                info.status;
+
+            element.className =
+                `stage ${status}`;
+
+            element.querySelector(
+                ".icon"
+            ).textContent =
+                statusIcon(status);
+
+            element.querySelector(
+                ".detail"
+            ).innerHTML =
+                formatStageDetail(
+                    stage,
+                    info
+                );
+        }
+    );
+
+
+    renderEventInfo(
+        data
+    );
+
+
+    document.getElementById(
+        "rawData"
+    ).textContent =
+        JSON.stringify(
+            data,
+            null,
+            2
+        );
+}
+
+
+function formatStageDetail(
+    stage,
+    info
+) {
+
+    if (stage === "fastapi") {
+        return "Event created";
+    }
+
+
+    if (stage === "kafka") {
+
+        if (info.status === "completed") {
+
+            return `
+                ${escapeHtml(info.topic)}
+                <br>
+                p${escapeHtml(info.partition)}
+                /
+                o${escapeHtml(info.offset)}
+            `;
+        }
+
+        if (info.status === "failed") {
+            return escapeHtml(
+                info.error
+            );
+        }
+
+        return "Publishing...";
+    }
+
+
+    if (stage === "spark") {
+
+        if (info.batch_id !== undefined) {
+
+            return `
+                batch ${escapeHtml(
+                    info.batch_id
+                )}
+            `;
+        }
+
+        return info.status;
+    }
+
+
+    if (stage === "iceberg") {
+
+        if (info.table) {
+
+            return `
+                ${escapeHtml(info.table)}
+                ${
+                    info.snapshot_id
+                    ? `<br>snapshot ${escapeHtml(
+                        info.snapshot_id
+                    )}`
+                    : ""
+                }
+            `;
+        }
+
+        return info.status;
+    }
+
+
+    if (stage === "minio") {
+
+        if (info.path) {
+
+            return escapeHtml(
+                info.path
+            );
+        }
+
+        return info.status;
+    }
+
+
+    return info.status;
+}
+
+
+function renderEventInfo(data) {
+
+    const event =
+        data.event || {};
+
+    document.getElementById(
+        "eventInfo"
+    ).innerHTML = `
+
+        <div class="metric">
+            <div class="label">USER</div>
+            <div class="value">
+                ${escapeHtml(
+                    event.username
+                )}
+            </div>
+        </div>
+
+        <div class="metric">
+            <div class="label">SERVICE</div>
+            <div class="value">
+                ${escapeHtml(
+                    event.service
+                )}
+            </div>
+        </div>
+
+        <div class="metric">
+            <div class="label">USAGE TYPE</div>
+            <div class="value">
+                ${escapeHtml(
+                    event.usage_type
+                )}
+            </div>
+        </div>
+
+        <div class="metric">
+            <div class="label">QUANTITY</div>
+            <div class="value">
+                ${escapeHtml(
+                    event.quantity
+                )}
+            </div>
+        </div>
+    `;
+}
+
+
+/* ==========================================================
+   Recent events
+   ========================================================== */
+
+async function loadRecentEvents() {
+
+    if (!accessToken) {
+        return;
+    }
+
+    const response = await fetch(
+        "/pipeline?limit=20",
+        {
+            headers: authHeaders()
+        }
+    );
+
+    if (!response.ok) {
+        return;
+    }
+
+    const data =
+        await response.json();
+
+    const events =
+        [...data.events].reverse();
+
+    if (!events.length) {
+
+        document.getElementById(
+            "recentEvents"
+        ).innerHTML =
+            `<span class="muted">
+                이벤트가 없습니다.
+             </span>`;
+
+        return;
+    }
+
+
+    let html = `
+        <table>
+            <thead>
+                <tr>
+                    <th>Event ID</th>
+                    <th>User</th>
+                    <th>Service</th>
+                    <th>Qty</th>
+                    <th>Pipeline</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+
+    events.forEach(
+        item => {
+
+            const stages = [
+                "fastapi",
+                "kafka",
+                "spark",
+                "iceberg",
+                "minio"
+            ];
+
+            const failed =
+                stages.some(
+                    stage =>
+                        item[stage].status ===
+                        "failed"
+                );
+
+            const complete =
+                stages.every(
+                    stage =>
+                        item[stage].status ===
+                        "completed"
+                );
+
+            let overall =
+                "processing";
+
+            if (failed) {
+                overall = "failed";
+            } else if (complete) {
+                overall = "completed";
+            }
+
+            html += `
+                <tr
+                    onclick="startMonitoring(
+                        '${escapeHtml(
+                            item.event_id
+                        )}'
+                    )"
+                    style="cursor:pointer"
+                >
+                    <td>
+                        ${escapeHtml(
+                            item.event_id
+                                .substring(0, 12)
+                        )}...
+                    </td>
+
+                    <td>
+                        ${escapeHtml(
+                            item.event.username
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeHtml(
+                            item.event.service
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeHtml(
+                            item.event.quantity
+                        )}
+                    </td>
+
+                    <td class="status ${overall}">
+                        ${statusIcon(overall)}
+                        ${overall}
+                    </td>
+                </tr>
+            `;
+        }
+    );
+
+
+    html += `
+            </tbody>
+        </table>
+    `;
+
+
+    document.getElementById(
+        "recentEvents"
+    ).innerHTML = html;
+}
+
+
+/* ==========================================================
+   Initial load
+   ========================================================== */
+
+if (accessToken) {
+
+    document.getElementById(
+        "loginStatus"
+    ).textContent =
+        "✓ 저장된 Access Token 사용";
+
+    loadRecentEvents();
+}
+
+</script>
+
+</body>
+</html>
