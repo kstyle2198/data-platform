@@ -222,13 +222,12 @@ services:
 
     container_name: spark
 
-    command:
-      - tail
-      - -f
-      - /dev/null
-
     volumes:
       - ./spark:/opt/spark/work
+
+    command:
+      - /opt/spark/bin/spark-submit
+      - /opt/spark/work/3_12_full_pipeline.py
 
     depends_on:
 

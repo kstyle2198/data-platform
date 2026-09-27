@@ -1,6 +1,7 @@
 import pandas as pd
 
 path  = "./data/00000-2-831b89de-ee23-46d9-9b8c-8894e8cd5170-0-00001.parquet"
+path = "./data/00000-5-50b76dea-094b-47a1-a21d-c33fea80c02c-0-00001.parquet"
 
 df = pd.read_parquet(path, engine="pyarrow")
 

@@ -4,3 +4,5 @@ httpx
 python-jose[cryptography]
 kafka-python
 pydantic
+minio
+pyarrow

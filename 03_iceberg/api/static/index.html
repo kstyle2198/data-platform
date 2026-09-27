@@ -1,11 +1,21 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Usage Pipeline Monitor</title>
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        Usage Data Pipeline Monitor
+    </title>
 
     <style>
+
         * {
             box-sizing: border-box;
         }
@@ -13,170 +23,186 @@
         body {
             margin: 0;
             font-family:
-                Inter,
-                "Noto Sans KR",
                 Arial,
+                "Noto Sans KR",
                 sans-serif;
-            background: #f4f6f8;
-            color: #17202a;
+            background: #f1f5f9;
+            color: #0f172a;
         }
 
         header {
-            background: #111827;
+            background: #0f172a;
             color: white;
-            padding: 18px 28px;
+            padding: 24px 32px;
         }
 
         header h1 {
-            margin: 0;
-            font-size: 22px;
+            margin: 0 0 8px 0;
+            font-size: 26px;
         }
 
         header p {
-            margin: 6px 0 0;
-            opacity: .75;
-            font-size: 13px;
+            margin: 0;
+            color: #cbd5e1;
         }
 
         main {
             max-width: 1400px;
             margin: 24px auto;
-            padding: 0 18px;
+            padding: 0 20px;
         }
 
         .grid {
             display: grid;
             grid-template-columns:
-                330px
+                340px
                 1fr;
-            gap: 18px;
+            gap: 20px;
+        }
+
+        section {
+            min-width: 0;
         }
 
         .card {
             background: white;
-            border-radius: 14px;
+            border-radius: 12px;
             padding: 20px;
+            margin-bottom: 20px;
             box-shadow:
-                0 2px 10px rgba(0,0,0,.06);
+                0 2px 10px
+                rgba(15, 23, 42, 0.08);
         }
 
-        .card h2 {
+        h2 {
             margin-top: 0;
-            font-size: 17px;
+            margin-bottom: 16px;
+            font-size: 19px;
         }
 
         label {
             display: block;
-            margin-top: 14px;
+            margin-top: 12px;
             margin-bottom: 6px;
             font-size: 13px;
             font-weight: 600;
         }
 
         input,
-        select,
-        button {
+        select {
             width: 100%;
-            padding: 11px;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
             border-radius: 8px;
-            border: 1px solid #d1d5db;
             font-size: 14px;
+            background: white;
         }
 
         button {
-            margin-top: 16px;
-            background: #111827;
+            width: 100%;
+            margin-top: 14px;
+            padding: 11px 14px;
+            border: 0;
+            border-radius: 8px;
+            background: #2563eb;
             color: white;
-            border: none;
+            font-weight: 600;
             cursor: pointer;
-            font-weight: 700;
         }
 
         button:hover {
-            opacity: .9;
+            opacity: 0.9;
         }
 
         button.secondary {
-            background: #e5e7eb;
-            color: #111827;
+            background: #64748b;
+        }
+
+        button.refresh {
+            width: auto;
+            padding: 8px 14px;
+            margin-top: 0;
         }
 
         .login-status {
-            margin-top: 10px;
+            margin-top: 12px;
+            padding: 10px;
+            border-radius: 8px;
+            background: #f8fafc;
             font-size: 13px;
         }
 
         .event-box {
-            margin-top: 18px;
+            margin-top: 14px;
             padding: 12px;
-            background: #f8fafc;
             border-radius: 8px;
-            font-size: 12px;
-            word-break: break-all;
+            background: #f8fafc;
+            font-size: 13px;
+            line-height: 1.5;
         }
 
         .pipeline {
             display: grid;
             grid-template-columns:
                 repeat(5, 1fr);
-            gap: 8px;
-            margin-top: 20px;
+            gap: 12px;
+            margin-bottom: 20px;
         }
 
         .stage {
             position: relative;
-            text-align: center;
-            padding: 16px 8px;
-            border-radius: 12px;
-            background: #f1f5f9;
-            border: 2px solid #e2e8f0;
+            padding: 16px;
+            border-radius: 10px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            min-height: 100px;
         }
 
         .stage:not(:last-child)::after {
             content: "→";
             position: absolute;
-            right: -17px;
-            top: 50%;
-            transform: translateY(-50%);
+            right: -12px;
+            top: 42px;
+            font-size: 20px;
             color: #94a3b8;
-            font-weight: bold;
             z-index: 2;
         }
 
-        .stage .icon {
-            font-size: 25px;
-        }
-
-        .stage .name {
-            margin-top: 7px;
-            font-weight: 700;
+        .stage-name {
             font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 10px;
         }
 
-        .stage .detail {
-            margin-top: 7px;
+        .stage-status {
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .detail {
+            margin-top: 8px;
             font-size: 11px;
             color: #64748b;
-            min-height: 30px;
+            word-break: break-word;
         }
 
-        .stage.completed {
-            border-color: #22c55e;
-            background: #f0fdf4;
+        .waiting {
+            border-color: #e2e8f0;
         }
 
-        .stage.processing {
+        .processing {
             border-color: #f59e0b;
             background: #fffbeb;
         }
 
-        .stage.failed {
-            border-color: #ef4444;
-            background: #fef2f2;
+        .completed {
+            border-color: #22c55e;
+            background: #f0fdf4;
         }
 
-        .stage.waiting {
-            opacity: .65;
+        .failed {
+            border-color: #ef4444;
+            background: #fef2f2;
         }
 
         .event-info {
@@ -184,63 +210,50 @@
             grid-template-columns:
                 repeat(4, 1fr);
             gap: 10px;
-            margin-top: 18px;
         }
 
-        .metric {
-            background: #f8fafc;
-            border-radius: 10px;
+        .info-item {
             padding: 12px;
+            background: #f8fafc;
+            border-radius: 8px;
         }
 
-        .metric .label {
-            margin: 0;
-            color: #64748b;
+        .info-label {
             font-size: 11px;
+            color: #64748b;
+            margin-bottom: 5px;
         }
 
-        .metric .value {
-            margin-top: 5px;
-            font-size: 14px;
-            font-weight: 700;
+        .info-value {
+            font-size: 13px;
+            font-weight: 600;
             word-break: break-all;
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px;
+        .recent-event {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            cursor: pointer;
         }
 
-        th,
-        td {
-            padding: 10px;
-            border-bottom: 1px solid #e5e7eb;
-            text-align: left;
-        }
-
-        th {
+        .recent-event:hover {
             background: #f8fafc;
         }
 
-        .status {
-            font-weight: 700;
+        .recent-event:last-child {
+            border-bottom: 0;
         }
 
-        .status.completed {
-            color: #16a34a;
+        .recent-id {
+            font-size: 12px;
+            font-family: monospace;
+            word-break: break-all;
         }
 
-        .status.processing {
-            color: #d97706;
-        }
-
-        .status.failed {
-            color: #dc2626;
-        }
-
-        .status.waiting {
+        .recent-meta {
+            margin-top: 5px;
             color: #64748b;
+            font-size: 12px;
         }
 
         .muted {
@@ -251,9 +264,104 @@
         pre {
             white-space: pre-wrap;
             word-break: break-word;
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 14px;
+            border-radius: 8px;
+            overflow: auto;
+            max-height: 400px;
+            font-size: 12px;
+        }
+
+        /* ================================================= */
+        /* Parquet */
+        /* ================================================= */
+
+        .parquet-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .parquet-meta {
+            display: grid;
+            grid-template-columns:
+                repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .parquet-meta-item {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .parquet-meta-label {
+            color: #64748b;
+            font-size: 11px;
+            margin-bottom: 5px;
+        }
+
+        .parquet-meta-value {
+            font-size: 13px;
+            font-weight: 700;
+            word-break: break-all;
+        }
+
+        .parquet-file {
+            margin-bottom: 6px;
+            padding: 8px 10px;
+            background: #f8fafc;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 11px;
+            word-break: break-all;
+        }
+
+        .parquet-table-wrap {
+            overflow-x: auto;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+        }
+
+        .parquet-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 700px;
+        }
+
+        .parquet-table th,
+        .parquet-table td {
+            padding: 9px 10px;
+            border-bottom: 1px solid #e2e8f0;
+            text-align: left;
+            font-size: 12px;
+            vertical-align: top;
+        }
+
+        .parquet-table th {
+            background: #f8fafc;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .parquet-table td {
+            word-break: break-word;
+        }
+
+        .parquet-empty {
+            padding: 20px;
+            text-align: center;
+            color: #64748b;
+            background: #f8fafc;
+            border-radius: 8px;
         }
 
         @media (max-width: 1000px) {
+
             .grid {
                 grid-template-columns: 1fr;
             }
@@ -267,302 +375,582 @@
                 right: 50%;
                 top: auto;
                 bottom: -22px;
-                transform: translateX(50%);
+                transform:
+                    translateX(50%);
             }
 
             .event-info {
-                grid-template-columns: repeat(2, 1fr);
+                grid-template-columns:
+                    repeat(2, 1fr);
+            }
+
+            .parquet-meta {
+                grid-template-columns: 1fr;
+            }
+
+            .parquet-toolbar {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            button.refresh {
+                width: 100%;
             }
         }
+
     </style>
+
 </head>
+
 
 <body>
 
+
 <header>
-    <h1>Usage Data Pipeline Monitor</h1>
+
+    <h1>
+        Usage Data Pipeline Monitor
+    </h1>
+
     <p>
         Keycloak → FastAPI → Kafka → Spark → Iceberg → MinIO
     </p>
+
 </header>
+
 
 <main>
 
-    <div class="grid">
 
-        <!-- ================================================= -->
-        <!-- Login / Event -->
-        <!-- ================================================= -->
+<div class="grid">
 
-        <section>
 
-            <div class="card">
+<!-- ===================================================== -->
+<!-- Left -->
+<!-- ===================================================== -->
 
-                <h2>1. Login</h2>
+<section>
 
-                <label>Username</label>
-                <input
-                    id="username"
-                    value="kim"
-                >
 
-                <label>Password</label>
-                <input
-                    id="password"
-                    type="password"
-                    value="test1234"
-                >
+<div class="card">
 
-                <button onclick="login()">
-                    Keycloak Login
-                </button>
+    <h2>
+        1. Login
+    </h2>
 
-                <div
-                    id="loginStatus"
-                    class="login-status"
-                >
-                    로그인이 필요합니다.
-                </div>
+    <label>
+        Username
+    </label>
 
+    <input
+        id="username"
+        value="kim"
+    >
+
+    <label>
+        Password
+    </label>
+
+    <input
+        id="password"
+        type="password"
+        value="test1234"
+    >
+
+    <button
+        onclick="login()"
+    >
+        Keycloak Login
+    </button>
+
+    <div
+        id="loginStatus"
+        class="login-status"
+    >
+        로그인이 필요합니다.
+    </div>
+
+</div>
+
+
+<div class="card">
+
+    <h2>
+        2. Event 발행
+    </h2>
+
+    <label>
+        Service
+    </label>
+
+    <select id="service">
+
+        <option value="api">
+            api
+        </option>
+
+        <option value="search">
+            search
+        </option>
+
+        <option value="storage">
+            storage
+        </option>
+
+        <option value="llm">
+            llm
+        </option>
+
+    </select>
+
+
+    <label>
+        Usage Type
+    </label>
+
+    <select id="usageType">
+
+        <option value="request">
+            request
+        </option>
+
+        <option value="token">
+            token
+        </option>
+
+        <option value="gb">
+            gb
+        </option>
+
+        <option value="minute">
+            minute
+        </option>
+
+    </select>
+
+
+    <label>
+        Quantity
+    </label>
+
+    <input
+        id="quantity"
+        type="number"
+        min="1"
+        value="10"
+    >
+
+
+    <button
+        onclick="publishEvent()"
+    >
+        이벤트 발행
+    </button>
+
+
+    <button
+        class="secondary"
+        onclick="logout()"
+    >
+        Logout
+    </button>
+
+
+    <div
+        id="eventMessage"
+        class="event-box"
+    >
+        이벤트를 발행하면
+        Pipeline 상태가 표시됩니다.
+    </div>
+
+</div>
+
+
+</section>
+
+
+<!-- ===================================================== -->
+<!-- Right -->
+<!-- ===================================================== -->
+
+<section>
+
+
+<div class="card">
+
+    <h2>
+        3. Pipeline Monitor
+    </h2>
+
+
+    <div
+        id="pipeline"
+        class="pipeline"
+    >
+
+
+        <div
+            id="stage-fastapi"
+            class="stage completed"
+        >
+
+            <div class="stage-name">
+                FastAPI
             </div>
 
-
-            <div class="card">
-
-                <h2>2. Event 발행</h2>
-
-                <label>Service</label>
-
-                <select id="service">
-                    <option value="api">api</option>
-                    <option value="search">search</option>
-                    <option value="storage">storage</option>
-                    <option value="llm">llm</option>
-                </select>
-
-
-                <label>Usage Type</label>
-
-                <select id="usageType">
-                    <option value="request">request</option>
-                    <option value="token">token</option>
-                    <option value="gb">gb</option>
-                    <option value="minute">minute</option>
-                </select>
-
-
-                <label>Quantity</label>
-
-                <input
-                    id="quantity"
-                    type="number"
-                    min="1"
-                    value="10"
-                >
-
-
-                <button onclick="publishEvent()">
-                    이벤트 발행
-                </button>
-
-                <button
-                    class="secondary"
-                    onclick="logout()"
-                >
-                    Logout
-                </button>
-
-                <div
-                    id="eventMessage"
-                    class="event-box"
-                >
-                    이벤트를 발행하면
-                    Pipeline 상태가 표시됩니다.
-                </div>
-
+            <div
+                id="status-fastapi"
+                class="stage-status"
+            >
+                Waiting
             </div>
 
-        </section>
-
-
-        <!-- ================================================= -->
-        <!-- Pipeline -->
-        <!-- ================================================= -->
-
-        <section>
-
-            <div class="card">
-
-                <h2>3. Pipeline Monitor</h2>
-
-                <div
-                    id="currentEvent"
-                    class="muted"
-                >
-                    현재 추적 중인 이벤트가 없습니다.
-                </div>
-
-
-                <div
-                    id="pipeline"
-                    class="pipeline"
-                >
-
-                    <div
-                        class="stage waiting"
-                        id="stage-fastapi"
-                    >
-                        <div class="icon">○</div>
-                        <div class="name">FastAPI</div>
-                        <div class="detail">
-                            Waiting
-                        </div>
-                    </div>
-
-
-                    <div
-                        class="stage waiting"
-                        id="stage-kafka"
-                    >
-                        <div class="icon">○</div>
-                        <div class="name">Kafka</div>
-                        <div class="detail">
-                            Waiting
-                        </div>
-                    </div>
-
-
-                    <div
-                        class="stage waiting"
-                        id="stage-spark"
-                    >
-                        <div class="icon">○</div>
-                        <div class="name">Spark</div>
-                        <div class="detail">
-                            Waiting
-                        </div>
-                    </div>
-
-
-                    <div
-                        class="stage waiting"
-                        id="stage-iceberg"
-                    >
-                        <div class="icon">○</div>
-                        <div class="name">Iceberg</div>
-                        <div class="detail">
-                            Waiting
-                        </div>
-                    </div>
-
-
-                    <div
-                        class="stage waiting"
-                        id="stage-minio"
-                    >
-                        <div class="icon">○</div>
-                        <div class="name">MinIO</div>
-                        <div class="detail">
-                            Waiting
-                        </div>
-                    </div>
-
-                </div>
-
-
-                <div
-                    id="eventInfo"
-                    class="event-info"
-                ></div>
-
+            <div
+                id="detail-fastapi"
+                class="detail"
+            >
             </div>
 
+        </div>
 
-            <div class="card">
 
-                <h2>4. Recent Events</h2>
+        <div
+            id="stage-kafka"
+            class="stage waiting"
+        >
 
-                <div id="recentEvents">
-                    <span class="muted">
-                        이벤트가 없습니다.
-                    </span>
-                </div>
-
+            <div class="stage-name">
+                Kafka
             </div>
 
-
-            <div class="card">
-
-                <h2>5. Raw Pipeline JSON</h2>
-
-                <pre id="rawData">
-아직 데이터가 없습니다.
-                </pre>
-
+            <div
+                id="status-kafka"
+                class="stage-status"
+            >
+                Waiting
             </div>
 
-        </section>
+            <div
+                id="detail-kafka"
+                class="detail"
+            >
+            </div>
+
+        </div>
+
+
+        <div
+            id="stage-spark"
+            class="stage waiting"
+        >
+
+            <div class="stage-name">
+                Spark
+            </div>
+
+            <div
+                id="status-spark"
+                class="stage-status"
+            >
+                Waiting
+            </div>
+
+            <div
+                id="detail-spark"
+                class="detail"
+            >
+            </div>
+
+        </div>
+
+
+        <div
+            id="stage-iceberg"
+            class="stage waiting"
+        >
+
+            <div class="stage-name">
+                Iceberg
+            </div>
+
+            <div
+                id="status-iceberg"
+                class="stage-status"
+            >
+                Waiting
+            </div>
+
+            <div
+                id="detail-iceberg"
+                class="detail"
+            >
+            </div>
+
+        </div>
+
+
+        <div
+            id="stage-minio"
+            class="stage waiting"
+        >
+
+            <div class="stage-name">
+                MinIO
+            </div>
+
+            <div
+                id="status-minio"
+                class="stage-status"
+            >
+                Waiting
+            </div>
+
+            <div
+                id="detail-minio"
+                class="detail"
+            >
+            </div>
+
+        </div>
 
     </div>
+
+
+    <div
+        id="eventInfo"
+        class="event-info"
+    >
+    </div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- Parquet -->
+<!-- ===================================================== -->
+
+<div class="card">
+
+    <div class="parquet-toolbar">
+
+        <div>
+
+            <h2 style="margin-bottom: 4px;">
+                4. Iceberg / Parquet Data
+            </h2>
+
+            <div
+                id="parquetStatus"
+                class="muted"
+            >
+                Iceberg 완료 후
+                실제 Parquet 데이터를 조회합니다.
+            </div>
+
+        </div>
+
+        <button
+            class="refresh"
+            onclick="refreshParquetData()"
+        >
+            Parquet 새로고침
+        </button>
+
+    </div>
+
+
+    <div
+        id="parquetMeta"
+        class="parquet-meta"
+    >
+
+        <div class="parquet-meta-item">
+
+            <div class="parquet-meta-label">
+                Bucket
+            </div>
+
+            <div
+                id="parquetBucket"
+                class="parquet-meta-value"
+            >
+                -
+            </div>
+
+        </div>
+
+
+        <div class="parquet-meta-item">
+
+            <div class="parquet-meta-label">
+                Rows
+            </div>
+
+            <div
+                id="parquetRows"
+                class="parquet-meta-value"
+            >
+                -
+            </div>
+
+        </div>
+
+
+        <div class="parquet-meta-item">
+
+            <div class="parquet-meta-label">
+                Files Scanned
+            </div>
+
+            <div
+                id="parquetFilesScanned"
+                class="parquet-meta-value"
+            >
+                -
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div
+        id="parquetFiles"
+    >
+    </div>
+
+
+    <div
+        id="parquetTable"
+        class="parquet-empty"
+    >
+        Iceberg 데이터가 아직 없습니다.
+    </div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- Recent Events -->
+<!-- ===================================================== -->
+
+<div class="card">
+
+    <h2>
+        5. Recent Events
+    </h2>
+
+    <div id="recentEvents">
+
+        <span class="muted">
+            이벤트가 없습니다.
+        </span>
+
+    </div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- Raw Pipeline -->
+<!-- ===================================================== -->
+
+<div class="card">
+
+    <h2>
+        6. Raw Pipeline JSON
+    </h2>
+
+    <pre id="rawPipeline">
+아직 데이터가 없습니다.
+    </pre>
+
+</div>
+
+
+</section>
+
+</div>
+
 
 </main>
 
 
 <script>
 
-let accessToken = localStorage.getItem(
-    "access_token"
-);
 
-let monitorTimer = null;
+// ============================================================
+// Global State
+// ============================================================
+
+let accessToken = null;
+
+let currentEventId = null;
+
+let pipelineTimer = null;
+
+let currentParquetEventId = null;
+
+let lastParquetSignature = null;
 
 
-/* ==========================================================
-   Utility
-   ========================================================== */
+// ============================================================
+// API Helper
+// ============================================================
 
-function authHeaders() {
+async function apiRequest(
+    url,
+    options = {}
+) {
 
-    return {
-        "Content-Type": "application/json",
-        "Authorization":
-            `Bearer ${accessToken}`
-    };
+    options.headers =
+        options.headers || {};
+
+    if (accessToken) {
+
+        options.headers[
+            "Authorization"
+        ] =
+            `Bearer ${accessToken}`;
+
+    }
+
+    const response =
+        await fetch(
+            url,
+            options
+        );
+
+    if (!response.ok) {
+
+        let message =
+            response.statusText;
+
+        try {
+
+            const data =
+                await response.json();
+
+            message =
+                data.detail ||
+                JSON.stringify(data);
+
+        } catch (e) {
+        }
+
+        throw new Error(
+            message
+        );
+    }
+
+    return response.json();
 }
 
 
-function statusIcon(status) {
-
-    if (status === "completed") {
-        return "✓";
-    }
-
-    if (status === "processing") {
-        return "●";
-    }
-
-    if (status === "failed") {
-        return "✗";
-    }
-
-    return "○";
-}
-
-
-function escapeHtml(value) {
-
-    return String(value ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-}
-
-
-/* ==========================================================
-   Login
-   ========================================================== */
+// ============================================================
+// Login
+// ============================================================
 
 async function login() {
 
@@ -576,84 +964,105 @@ async function login() {
             "password"
         ).value;
 
-    const response = await fetch(
-        "/login",
-        {
-            method: "POST",
-            headers: {
-                "Content-Type":
-                    "application/json"
-            },
-            body: JSON.stringify({
-                username,
-                password
-            })
-        }
-    );
 
-    const data =
-        await response.json();
-
-    if (!response.ok) {
-
+    const status =
         document.getElementById(
             "loginStatus"
-        ).textContent =
-            `Login 실패: ${data.detail}`;
+        );
 
-        return;
+
+    status.textContent =
+        "로그인 중...";
+
+
+    try {
+
+        const data =
+            await apiRequest(
+                "/login",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        username,
+                        password
+                    })
+                }
+            );
+
+
+        accessToken =
+            data.access_token;
+
+
+        status.textContent =
+            "로그인 성공";
+
+
+        await loadRecentEvents();
+
+    } catch (error) {
+
+        status.textContent =
+            "로그인 실패: "
+            + error.message;
     }
-
-    accessToken =
-        data.access_token;
-
-    localStorage.setItem(
-        "access_token",
-        accessToken
-    );
-
-    document.getElementById(
-        "loginStatus"
-    ).textContent =
-        "✓ Keycloak 로그인 성공";
-
-    loadRecentEvents();
 }
 
 
-/* ==========================================================
-   Logout
-   ========================================================== */
+// ============================================================
+// Logout
+// ============================================================
 
 function logout() {
 
-    localStorage.removeItem(
-        "access_token"
-    );
-
     accessToken = null;
+
+    currentEventId = null;
+
+    currentParquetEventId = null;
+
+    lastParquetSignature = null;
+
+
+    if (pipelineTimer) {
+
+        clearInterval(
+            pipelineTimer
+        );
+
+        pipelineTimer = null;
+    }
+
 
     document.getElementById(
         "loginStatus"
     ).textContent =
         "로그아웃되었습니다.";
+
 }
 
 
-/* ==========================================================
-   Publish event
-   ========================================================== */
+// ============================================================
+// Publish Event
+// ============================================================
 
 async function publishEvent() {
 
     if (!accessToken) {
 
         alert(
-            "먼저 Keycloak 로그인하세요."
+            "먼저 로그인하세요."
         );
 
         return;
     }
+
 
     const service =
         document.getElementById(
@@ -672,149 +1081,208 @@ async function publishEvent() {
             ).value
         );
 
-    const response = await fetch(
-        "/usage",
-        {
-            method: "POST",
-            headers: authHeaders(),
-            body: JSON.stringify({
-                service,
-                usage_type: usageType,
-                quantity
-            })
-        }
-    );
 
-    const data =
-        await response.json();
-
-    if (!response.ok) {
-
+    const message =
         document.getElementById(
             "eventMessage"
-        ).textContent =
-            `이벤트 발행 실패: ${data.detail}`;
+        );
 
-        return;
+
+    message.textContent =
+        "이벤트 발행 중...";
+
+
+    try {
+
+        const data =
+            await apiRequest(
+                "/usage",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        service,
+
+                        usage_type:
+                            usageType,
+
+                        quantity
+
+                    })
+                }
+            );
+
+
+        currentEventId =
+            data.event_id;
+
+
+        currentParquetEventId =
+            data.event_id;
+
+
+        lastParquetSignature =
+            null;
+
+
+        message.textContent =
+            "이벤트 발행 성공: "
+            + data.event_id;
+
+
+        await loadPipeline(
+            currentEventId
+        );
+
+
+        if (pipelineTimer) {
+
+            clearInterval(
+                pipelineTimer
+            );
+        }
+
+
+        pipelineTimer =
+            setInterval(
+                () => {
+
+                    if (
+                        currentEventId
+                    ) {
+
+                        loadPipeline(
+                            currentEventId
+                        );
+
+                    }
+
+                },
+                1000
+            );
+
+
+        await loadRecentEvents();
+
+
+    } catch (error) {
+
+        message.textContent =
+            "이벤트 발행 실패: "
+            + error.message;
     }
-
-    const eventId =
-        data.event_id;
-
-    document.getElementById(
-        "eventMessage"
-    ).innerHTML =
-        `<b>✓ 이벤트 발행 성공</b><br>
-         Event ID: ${escapeHtml(eventId)}<br>
-         Kafka: ${escapeHtml(data.kafka.topic)}
-         /
-         partition ${data.kafka.partition}
-         /
-         offset ${data.kafka.offset}`;
-
-    startMonitoring(eventId);
 }
 
 
-/* ==========================================================
-   Monitor
-   ========================================================== */
+// ============================================================
+// Load Pipeline
+// ============================================================
 
-function startMonitoring(eventId) {
-
-    if (monitorTimer) {
-        clearInterval(
-            monitorTimer
-        );
-    }
-
-    loadPipeline(eventId);
-
-    monitorTimer =
-        setInterval(
-            () => loadPipeline(eventId),
-            1000
-        );
-}
-
-
-async function loadPipeline(eventId) {
+async function loadPipeline(
+    eventId
+) {
 
     if (!accessToken) {
         return;
     }
 
-    const response = await fetch(
-        `/pipeline/${eventId}`,
-        {
-            headers: authHeaders()
-        }
-    );
 
-    if (!response.ok) {
-        return;
-    }
+    try {
 
-    const data =
-        await response.json();
+        const data =
+            await apiRequest(
+                `/pipeline/${eventId}`
+            );
 
-    renderPipeline(data);
 
-    loadRecentEvents();
+        renderPipeline(
+            data
+        );
 
-    const completed =
-        [
-            "fastapi",
-            "kafka",
-            "spark",
-            "iceberg",
-            "minio"
-        ].every(
-            stage =>
-                data[stage].status ===
+
+        document.getElementById(
+            "rawPipeline"
+        ).textContent =
+            JSON.stringify(
+                data,
+                null,
+                2
+            );
+
+
+        if (
+            data.iceberg &&
+            data.iceberg.status ===
                 "completed"
+        ) {
+
+            const parquetSignature =
+                `${eventId}:`
+                + `${
+                    data.iceberg
+                        .snapshot_id
+                    ?? ""
+                }`;
+
+
+            if (
+                parquetSignature
+                !== lastParquetSignature
+            ) {
+
+                lastParquetSignature =
+                    parquetSignature;
+
+                currentParquetEventId =
+                    eventId;
+
+                await loadParquetData(
+                    eventId
+                );
+            }
+        }
+
+
+        if (
+            isPipelineFinished(
+                data
+            )
+        ) {
+
+            if (pipelineTimer) {
+
+                clearInterval(
+                    pipelineTimer
+                );
+
+                pipelineTimer =
+                    null;
+            }
+        }
+
+    } catch (error) {
+
+        console.error(
+            "Pipeline error:",
+            error
         );
-
-    const failed =
-        [
-            "fastapi",
-            "kafka",
-            "spark",
-            "iceberg",
-            "minio"
-        ].some(
-            stage =>
-                data[stage].status ===
-                "failed"
-        );
-
-    if (completed || failed) {
-
-        clearInterval(
-            monitorTimer
-        );
-
-        monitorTimer = null;
     }
 }
 
 
-/* ==========================================================
-   Render pipeline
-   ========================================================== */
+// ============================================================
+// Pipeline Render
+// ============================================================
 
-function renderPipeline(data) {
-
-    document.getElementById(
-        "currentEvent"
-    ).innerHTML =
-        `<b>Event ID:</b>
-         ${escapeHtml(data.event_id)}
-         &nbsp;&nbsp;
-         <span class="muted">
-         ${escapeHtml(data.created_at)}
-         </span>`;
-
+function renderPipeline(
+    data
+) {
 
     const stages = [
         "fastapi",
@@ -828,188 +1296,541 @@ function renderPipeline(data) {
     stages.forEach(
         stage => {
 
-            const element =
+            const stageElement =
                 document.getElementById(
                     `stage-${stage}`
                 );
 
-            const info =
-                data[stage];
+            const statusElement =
+                document.getElementById(
+                    `status-${stage}`
+                );
+
+            const detailElement =
+                document.getElementById(
+                    `detail-${stage}`
+                );
+
+
+            const stageData =
+                data[stage] || {};
+
 
             const status =
-                info.status;
+                stageData.status ||
+                "waiting";
 
-            element.className =
+
+            stageElement.className =
                 `stage ${status}`;
 
-            element.querySelector(
-                ".icon"
-            ).textContent =
-                statusIcon(status);
 
-            element.querySelector(
-                ".detail"
-            ).innerHTML =
+            statusElement.textContent =
+                formatStatus(
+                    status
+                );
+
+
+            detailElement.textContent =
                 formatStageDetail(
                     stage,
-                    info
+                    stageData
                 );
         }
     );
 
 
-    renderEventInfo(
-        data
-    );
-
-
-    document.getElementById(
-        "rawData"
-    ).textContent =
-        JSON.stringify(
-            data,
-            null,
-            2
-        );
-}
-
-
-function formatStageDetail(
-    stage,
-    info
-) {
-
-    if (stage === "fastapi") {
-        return "Event created";
-    }
-
-
-    if (stage === "kafka") {
-
-        if (info.status === "completed") {
-
-            return `
-                ${escapeHtml(info.topic)}
-                <br>
-                p${escapeHtml(info.partition)}
-                /
-                o${escapeHtml(info.offset)}
-            `;
-        }
-
-        if (info.status === "failed") {
-            return escapeHtml(
-                info.error
-            );
-        }
-
-        return "Publishing...";
-    }
-
-
-    if (stage === "spark") {
-
-        if (info.batch_id !== undefined) {
-
-            return `
-                batch ${escapeHtml(
-                    info.batch_id
-                )}
-            `;
-        }
-
-        return info.status;
-    }
-
-
-    if (stage === "iceberg") {
-
-        if (info.table) {
-
-            return `
-                ${escapeHtml(info.table)}
-                ${
-                    info.snapshot_id
-                    ? `<br>snapshot ${escapeHtml(
-                        info.snapshot_id
-                    )}`
-                    : ""
-                }
-            `;
-        }
-
-        return info.status;
-    }
-
-
-    if (stage === "minio") {
-
-        if (info.path) {
-
-            return escapeHtml(
-                info.path
-            );
-        }
-
-        return info.status;
-    }
-
-
-    return info.status;
-}
-
-
-function renderEventInfo(data) {
-
     const event =
         data.event || {};
+
 
     document.getElementById(
         "eventInfo"
     ).innerHTML = `
 
-        <div class="metric">
-            <div class="label">USER</div>
-            <div class="value">
-                ${escapeHtml(
-                    event.username
-                )}
+        <div class="info-item">
+
+            <div class="info-label">
+                Event ID
             </div>
+
+            <div class="info-value">
+                ${
+                    escapeHtml(
+                        data.event_id ||
+                        "-"
+                    )
+                }
+            </div>
+
         </div>
 
-        <div class="metric">
-            <div class="label">SERVICE</div>
-            <div class="value">
-                ${escapeHtml(
-                    event.service
-                )}
+
+        <div class="info-item">
+
+            <div class="info-label">
+                User
             </div>
+
+            <div class="info-value">
+                ${
+                    escapeHtml(
+                        event.username ||
+                        "-"
+                    )
+                }
+            </div>
+
         </div>
 
-        <div class="metric">
-            <div class="label">USAGE TYPE</div>
-            <div class="value">
-                ${escapeHtml(
-                    event.usage_type
-                )}
+
+        <div class="info-item">
+
+            <div class="info-label">
+                Service
             </div>
+
+            <div class="info-value">
+                ${
+                    escapeHtml(
+                        event.service ||
+                        "-"
+                    )
+                }
+            </div>
+
         </div>
 
-        <div class="metric">
-            <div class="label">QUANTITY</div>
-            <div class="value">
-                ${escapeHtml(
-                    event.quantity
-                )}
+
+        <div class="info-item">
+
+            <div class="info-label">
+                Quantity
             </div>
+
+            <div class="info-value">
+                ${
+                    escapeHtml(
+                        event.quantity ??
+                        "-"
+                    )
+                }
+            </div>
+
         </div>
+
     `;
 }
 
 
-/* ==========================================================
-   Recent events
-   ========================================================== */
+// ============================================================
+// Pipeline Helpers
+// ============================================================
+
+function formatStatus(
+    status
+) {
+
+    const map = {
+
+        waiting:
+            "Waiting",
+
+        processing:
+            "Processing",
+
+        completed:
+            "Completed",
+
+        failed:
+            "Failed"
+    };
+
+
+    return (
+        map[status] ||
+        status
+    );
+}
+
+
+function formatStageDetail(
+    stage,
+    data
+) {
+
+    if (
+        data.status ===
+        "failed"
+    ) {
+
+        return (
+            data.error ||
+            "Failed"
+        );
+    }
+
+
+    if (
+        stage ===
+        "kafka"
+    ) {
+
+        if (
+            data.topic
+        ) {
+
+            return (
+                `${data.topic} / `
+                + `P${data.partition} / `
+                + `O${data.offset}`
+            );
+        }
+    }
+
+
+    if (
+        stage ===
+        "spark"
+    ) {
+
+        if (
+            data.batch_id !==
+            undefined
+        ) {
+
+            return (
+                `batch_id=${data.batch_id}`
+            );
+        }
+    }
+
+
+    if (
+        stage ===
+        "iceberg"
+    ) {
+
+        if (
+            data.snapshot_id
+        ) {
+
+            return (
+                `snapshot=${data.snapshot_id}`
+            );
+        }
+
+        if (
+            data.table
+        ) {
+
+            return data.table;
+        }
+    }
+
+
+    if (
+        stage ===
+        "minio"
+    ) {
+
+        if (
+            data.path
+        ) {
+
+            return data.path;
+        }
+    }
+
+
+    return "";
+}
+
+
+function isPipelineFinished(
+    data
+) {
+
+    const stages = [
+        "fastapi",
+        "kafka",
+        "spark",
+        "iceberg",
+        "minio"
+    ];
+
+
+    return stages.every(
+        stage => {
+
+            const status =
+                data[
+                    stage
+                ]?.status;
+
+            return (
+                status ===
+                    "completed"
+                ||
+                status ===
+                    "failed"
+            );
+        }
+    );
+}
+
+
+// ============================================================
+// Parquet Data
+// ============================================================
+
+async function loadParquetData(
+    eventId
+) {
+
+    if (!accessToken) {
+        return;
+    }
+
+
+    const status =
+        document.getElementById(
+            "parquetStatus"
+        );
+
+
+    status.textContent =
+        "MinIO에서 실제 Parquet 데이터를 조회하는 중...";
+
+
+    try {
+
+        const data =
+            await apiRequest(
+                `/iceberg/parquet/${eventId}`
+            );
+
+
+        renderParquetData(
+            data
+        );
+
+
+        status.textContent =
+            `Parquet 조회 완료`
+            + ` · ${data.row_count} row`;
+
+    } catch (error) {
+
+        console.error(
+            "Parquet error:",
+            error
+        );
+
+
+        status.textContent =
+            "Parquet 조회 실패: "
+            + error.message;
+
+
+        const parquetTable =
+            document.getElementById("parquetTable");
+
+        if (parquetTable) {
+            parquetTable.innerHTML = `
+                <div class="parquet-empty">
+                    Parquet 데이터를
+                    읽을 수 없습니다.
+                    <br><br>
+                    ${escapeHtml(error.message)}
+                </div>
+            `;
+        }
+    }
+}
+
+
+// ============================================================
+// Manual Refresh
+// ============================================================
+
+async function refreshParquetData() {
+
+    if (!currentParquetEventId) {
+
+        document.getElementById(
+            "parquetStatus"
+        ).textContent =
+            "조회할 Event ID가 없습니다.";
+
+        return;
+    }
+
+
+    lastParquetSignature =
+        null;
+
+
+    await loadParquetData(
+        currentParquetEventId
+    );
+}
+
+
+// ============================================================
+// Render Parquet
+// ============================================================
+
+function renderParquetData(data) {
+    const meta = document.getElementById("parquetMeta");
+    const tableContainer = document.getElementById("parquetTable");
+
+    if (!meta || !tableContainer) {
+        console.error("Parquet UI element not found:", {
+            parquetMeta: !!meta,
+            parquetTable: !!tableContainer
+        });
+        return;
+    }
+
+    if (!data) {
+        meta.innerHTML = "";
+        tableContainer.innerHTML = `
+            <div class="parquet-empty">
+                Iceberg 데이터가 아직 없습니다.
+            </div>
+        `;
+        return;
+    }
+
+    const icebergTable =
+        data.table || "local.usage_db.usage_events";
+
+    meta.innerHTML = `
+        <div class="parquet-meta-item">
+            <div class="parquet-meta-label">Iceberg Table</div>
+            <div class="parquet-meta-value">
+                ${escapeHtml(icebergTable)}
+            </div>
+        </div>
+
+        <div class="parquet-meta-item">
+            <div class="parquet-meta-label">Bucket</div>
+            <div class="parquet-meta-value">
+                ${escapeHtml(data.bucket || "-")}
+            </div>
+        </div>
+
+        <div class="parquet-meta-item">
+            <div class="parquet-meta-label">Rows</div>
+            <div class="parquet-meta-value">
+                ${data.row_count ?? 0}
+            </div>
+        </div>
+
+        <div class="parquet-meta-item">
+            <div class="parquet-meta-label">Files Scanned</div>
+            <div class="parquet-meta-value">
+                ${data.files_scanned ?? 0}
+            </div>
+        </div>
+    `;
+
+    if (!data.rows || data.rows.length === 0) {
+        tableContainer.innerHTML = `
+            <div class="parquet-empty">
+                해당 event_id의 데이터가 없습니다.
+            </div>
+        `;
+        return;
+    }
+
+    const columns = Object.keys(data.rows[0]);
+    const tableWrap = document.createElement("div");
+    tableWrap.className = "parquet-table-wrap";
+
+    const table = document.createElement("table");
+    table.className = "parquet-table";
+
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+
+    columns.forEach(column => {
+        const th = document.createElement("th");
+        th.textContent = column;
+        headerRow.appendChild(th);
+    });
+
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+
+    data.rows.forEach(row => {
+        const tr = document.createElement("tr");
+
+        columns.forEach(column => {
+            const td = document.createElement("td");
+            td.textContent = formatParquetValue(row[column]);
+            tr.appendChild(td);
+        });
+
+        tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+
+    tableContainer.innerHTML = "";
+    tableContainer.appendChild(tableWrap);
+}
+
+// ============================================================
+// Format Parquet Value
+// ============================================================
+
+function formatParquetValue(
+    value
+) {
+
+    if (
+        value === null ||
+        value === undefined
+    ) {
+
+        return "";
+    }
+
+
+    if (
+        typeof value ===
+        "object"
+    ) {
+
+        try {
+
+            return JSON.stringify(
+                value
+            );
+
+        } catch (e) {
+
+            return String(
+                value
+            );
+        }
+    }
+
+
+    return String(
+        value
+    );
+}
+
+
+// ============================================================
+// Recent Events
+// ============================================================
 
 async function loadRecentEvents() {
 
@@ -1017,156 +1838,229 @@ async function loadRecentEvents() {
         return;
     }
 
-    const response = await fetch(
-        "/pipeline?limit=20",
-        {
-            headers: authHeaders()
+
+    try {
+
+        const data =
+            await apiRequest(
+                "/pipeline?limit=20"
+            );
+
+
+        const container =
+            document.getElementById(
+                "recentEvents"
+            );
+
+
+        if (
+            !data.events ||
+            !data.events.length
+        ) {
+
+            container.innerHTML =
+                `<span class="muted">
+                    이벤트가 없습니다.
+                </span>`;
+
+            return;
         }
-    );
 
-    if (!response.ok) {
-        return;
+
+        container.innerHTML =
+            data.events
+                .slice()
+                .reverse()
+                .map(
+                    event => {
+
+                        const item =
+                            event.event ||
+                            {};
+
+                        return `
+
+                            <div
+                                class="recent-event"
+                                onclick="
+                                    selectEvent(
+                                        '${escapeJs(
+                                            event.event_id
+                                        )}'
+                                    )
+                                "
+                            >
+
+                                <div
+                                    class="recent-id"
+                                >
+                                    ${
+                                        escapeHtml(
+                                            event.event_id
+                                        )
+                                    }
+                                </div>
+
+                                <div
+                                    class="recent-meta"
+                                >
+                                    ${
+                                        escapeHtml(
+                                            item.username ||
+                                            "-"
+                                        )
+                                    }
+
+                                    ·
+
+                                    ${
+                                        escapeHtml(
+                                            item.service ||
+                                            "-"
+                                        )
+                                    }
+
+                                    ·
+
+                                    ${
+                                        escapeHtml(
+                                            item.usage_type ||
+                                            "-"
+                                        )
+                                    }
+
+                                    ·
+
+                                    ${
+                                        escapeHtml(
+                                            item.quantity ??
+                                            "-"
+                                        )
+                                    }
+
+                                </div>
+
+                            </div>
+
+                        `;
+                    }
+                )
+                .join("");
+
+    } catch (error) {
+
+        console.error(
+            "Recent events error:",
+            error
+        );
     }
-
-    const data =
-        await response.json();
-
-    const events =
-        [...data.events].reverse();
-
-    if (!events.length) {
-
-        document.getElementById(
-            "recentEvents"
-        ).innerHTML =
-            `<span class="muted">
-                이벤트가 없습니다.
-             </span>`;
-
-        return;
-    }
-
-
-    let html = `
-        <table>
-            <thead>
-                <tr>
-                    <th>Event ID</th>
-                    <th>User</th>
-                    <th>Service</th>
-                    <th>Qty</th>
-                    <th>Pipeline</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-
-
-    events.forEach(
-        item => {
-
-            const stages = [
-                "fastapi",
-                "kafka",
-                "spark",
-                "iceberg",
-                "minio"
-            ];
-
-            const failed =
-                stages.some(
-                    stage =>
-                        item[stage].status ===
-                        "failed"
-                );
-
-            const complete =
-                stages.every(
-                    stage =>
-                        item[stage].status ===
-                        "completed"
-                );
-
-            let overall =
-                "processing";
-
-            if (failed) {
-                overall = "failed";
-            } else if (complete) {
-                overall = "completed";
-            }
-
-            html += `
-                <tr
-                    onclick="startMonitoring(
-                        '${escapeHtml(
-                            item.event_id
-                        )}'
-                    )"
-                    style="cursor:pointer"
-                >
-                    <td>
-                        ${escapeHtml(
-                            item.event_id
-                                .substring(0, 12)
-                        )}...
-                    </td>
-
-                    <td>
-                        ${escapeHtml(
-                            item.event.username
-                        )}
-                    </td>
-
-                    <td>
-                        ${escapeHtml(
-                            item.event.service
-                        )}
-                    </td>
-
-                    <td>
-                        ${escapeHtml(
-                            item.event.quantity
-                        )}
-                    </td>
-
-                    <td class="status ${overall}">
-                        ${statusIcon(overall)}
-                        ${overall}
-                    </td>
-                </tr>
-            `;
-        }
-    );
-
-
-    html += `
-            </tbody>
-        </table>
-    `;
-
-
-    document.getElementById(
-        "recentEvents"
-    ).innerHTML = html;
 }
 
 
-/* ==========================================================
-   Initial load
-   ========================================================== */
+// ============================================================
+// Select Event
+// ============================================================
 
-if (accessToken) {
+async function selectEvent(
+    eventId
+) {
 
-    document.getElementById(
-        "loginStatus"
-    ).textContent =
-        "✓ 저장된 Access Token 사용";
+    currentEventId =
+        eventId;
 
-    loadRecentEvents();
+    currentParquetEventId =
+        eventId;
+
+    lastParquetSignature =
+        null;
+
+
+    await loadPipeline(
+        eventId
+    );
+
+
+    if (pipelineTimer) {
+
+        clearInterval(
+            pipelineTimer
+        );
+    }
+
+
+    pipelineTimer =
+        setInterval(
+            () => {
+
+                loadPipeline(
+                    eventId
+                );
+
+            },
+            1000
+        );
 }
+
+
+// ============================================================
+// HTML Escape
+// ============================================================
+
+function escapeHtml(
+    value
+) {
+
+    return String(
+        value ?? ""
+    )
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
+}
+
+
+function escapeJs(
+    value
+) {
+
+    return String(
+        value ?? ""
+    )
+        .replace(
+            /\\/g,
+            "\\\\"
+        )
+        .replace(
+            /'/g,
+            "\\'"
+        )
+        .replace(
+            /"/g,
+            '\\"'
+        );
+}
+
 
 </script>
 
+
 </body>
+
 </html>
