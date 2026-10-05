@@ -64,7 +64,7 @@ LDAP_BIND_DN = os.getenv("LDAP_BIND_DN", "cn=admin,dc=example,dc=org",)
 LDAP_BIND_PASSWORD = os.getenv("LDAP_BIND_PASSWORD", "")
 LDAP_ADMIN_ROLE = os.getenv("LDAP_ADMIN_ROLE", "ldap-admin")
 
-KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092",)
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092",)
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC","usage-events",)
 PIPELINE_STATUS_TOPIC = os.getenv("PIPELINE_STATUS_TOPIC", "pipeline-status",)
 MAX_PIPELINE_EVENTS = int(os.getenv("MAX_PIPELINE_EVENTS", "100",))

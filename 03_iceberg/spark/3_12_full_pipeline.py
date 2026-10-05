@@ -44,7 +44,7 @@ else:
 # Configuration
 # ============================================================
 
-KAFKA_BOOTSTRAP_SERVERS = "kafka:9092"
+KAFKA_BOOTSTRAP_SERVERS = "kafka:29092"
 KAFKA_SOURCE_TOPIC = "usage-events"
 KAFKA_STATUS_TOPIC = "pipeline-status"
 
