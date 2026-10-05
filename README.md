@@ -1,53 +1,78 @@
-# Phase 3. Kafka → Spark → Iceberg → MinIO Data Pipeline
-
+# Phase 3. OpenLDAP → Keycloak → FastAPI → Kafka → Spark → Iceberg → MinIO
 
 
 https://github.com/user-attachments/assets/cd4ae5d6-c878-469c-97ab-01cd920e88f4
 
 
+Docker Compose 환경에서 **사용자 인증부터 실시간 데이터 저장까지** 하나의 End-to-End Pipeline을 구성한다.
 
-Docker Compose 환경에서 **Kafka → Spark Structured Streaming → Apache Iceberg → MinIO**로 이어지는 데이터 처리 파이프라인을 구축하고 실습한다.
+핵심 흐름은 다음과 같다.
 
-Phase 3의 핵심 목표는 Kafka로 들어온 사용량 이벤트가 Spark에서 처리되고, Apache Iceberg 테이블로 저장되며, 실제 데이터 파일인 Parquet가 MinIO Object Storage에 생성되는 전체 과정을 확인하는 것이다.
+```text
+OpenLDAP
+   ↓ LDAP Federation
+Keycloak
+   ↓ JWT
+FastAPI
+   ↓ Usage Event
+Kafka
+   ↓ Streaming
+Spark
+   ↓
+Apache Iceberg
+   ↓
+Parquet
+   ↓
+MinIO
+```
 
 ---
 
-## 1. Architecture
+# 1. Architecture
 
 ```text
                          ┌──────────────┐
+                         │   OpenLDAP   │
+                         │ User         │
+                         │ Directory    │
+                         └──────┬───────┘
+                                │ LDAP
+                                ▼
+                         ┌──────────────┐
                          │   Keycloak   │
-                         │ Authentication
+                         │ Authentication│
+                         │ Authorization │
                          └──────┬───────┘
                                 │ JWT
                                 ▼
                          ┌──────────────┐
                          │   FastAPI    │
-                         │ Usage API    │
+                         │  Usage API   │
+                         │  LDAP Admin  │
                          └──────┬───────┘
                                 │
-                                │ usage event
+                                │ Usage Event
                                 ▼
                     ┌──────────────────────┐
                     │        Kafka         │
                     │    usage-events      │
                     └──────────┬───────────┘
                                │
-                               │ Structured Streaming
+                               │ Streaming
                                ▼
                     ┌──────────────────────┐
                     │        Spark         │
                     │ Structured Streaming │
                     └──────────┬───────────┘
                                │
-                               │ append
+                               │ Append
                                ▼
                     ┌──────────────────────┐
                     │   Apache Iceberg     │
                     │ usage_db.usage_events│
                     └──────────┬───────────┘
                                │
-                               │ Parquet
+                               │ Data Files
                                ▼
                     ┌──────────────────────┐
                     │        MinIO         │
@@ -55,70 +80,309 @@ Phase 3의 핵심 목표는 Kafka로 들어온 사용량 이벤트가 Spark에�
                     └──────────────────────┘
 ```
 
-전체 데이터 흐름:
+Keycloak은 LDAP User Federation을 통해 LDAP 사용자를 인증하고 사용자 정보를 Keycloak 사용자 모델로 연결할 수 있다. LDAP 사용자의 비밀번호 검증은 LDAP 서버에서 수행된다. ([Keycloak][1])
+
+---
+
+# 2. Authentication
+
+OpenLDAP에는 사용자 정보를 저장한다.
 
 ```text
-User
-  ↓
-Keycloak Login
-  ↓
-JWT
-  ↓
-FastAPI
-  ↓
-Kafka : usage-events
-  ↓
-Spark Structured Streaming
-  ↓
-Apache Iceberg Table
-  ↓
-Parquet Files
-  ↓
-MinIO warehouse bucket
+OpenLDAP
+
+dc=example,dc=org
+└── ou=people
+    ├── uid=kim
+    └── uid=user01
+```
+
+Keycloak은 OpenLDAP와 User Federation으로 연결한다.
+
+```text
+Keycloak
+└── Realm: hdaic
+    └── User Federation
+        └── OpenLDAP
+```
+
+Docker 내부 연결:
+
+```text
+ldap://openldap:389
+```
+
+주요 LDAP Attribute:
+
+```text
+uid
+cn
+givenName
+sn
+mail
+departmentNumber
+```
+
+예:
+
+```text
+uid       → username
+cn        → name
+givenName → firstName
+sn        → lastName
+mail      → email
+```
+
+LDAP 사용자를 전체 Keycloak 사용자 DB로 동기화할 경우 `Synchronize all users`를 사용할 수 있다. ([Keycloak][1])
+
+---
+
+# 3. Keycloak Role
+
+FastAPI의 LDAP 관리 기능은 `ldap-admin` Role로 보호한다.
+
+```text
+kim
+
+Roles
+ ├── user
+ └── ldap-admin
+```
+
+JWT:
+
+```text
+realm_access.roles
+
+[
+  "user",
+  "ldap-admin"
+]
+```
+
+FastAPI에서는 `ldap-admin`이 없는 사용자의 LDAP 관리 API 접근을 차단한다.
+
+```text
+GET  /admin/ldap/users
+POST /admin/ldap/users
 ```
 
 ---
 
-# 2. Phase 3 핵심 학습 내용
+# 4. FastAPI
 
-Phase 3에서는 다음 개념을 연결해서 학습한다.
+FastAPI의 주요 역할:
 
-| 기술                   | 역할                     |
-| -------------------- | ---------------------- |
-| Kafka                | 실시간 이벤트 스트림            |
-| Spark                | 대용량 데이터 처리 / Streaming |
-| Structured Streaming | Kafka 실시간 데이터 처리       |
-| Apache Iceberg       | 데이터 레이크 테이블 관리         |
-| Parquet              | 실제 데이터 저장 파일           |
-| MinIO                | S3 호환 Object Storage   |
-| Checkpoint           | Streaming 처리 상태 저장     |
-| FastAPI              | Pipeline 상태 및 결과 조회    |
+```text
+1. Keycloak JWT 검증
+2. 사용자 정보 조회
+3. Usage Event 생성
+4. Kafka Event 발행
+5. LDAP 사용자 관리
+6. Pipeline 상태 조회
+7. Iceberg / Parquet 데이터 조회
+```
 
-핵심 관계는 다음과 같다.
+사용자 정보:
+
+```text
+GET /me
+```
+
+예:
+
+```json
+{
+  "username": "kim",
+  "email": "kim@example.com",
+  "name": "Kim User",
+  "roles": [
+    "user",
+    "ldap-admin"
+  ]
+}
+```
+
+---
+
+# 5. Kafka
+
+Usage Event는 Kafka Topic으로 전달한다.
+
+```text
+usage-events
+```
+
+예:
+
+```json
+{
+  "event_id": "a123...",
+  "event_type": "usage",
+  "username": "kim",
+  "service": "api",
+  "usage_type": "request",
+  "quantity": 10,
+  "timestamp": "2026-10-05T..."
+}
+```
+
+Pipeline 상태는 별도의 Topic을 사용한다.
+
+```text
+pipeline-status
+```
+
+---
+
+# 6. Spark Structured Streaming
+
+Spark는 Kafka의 `usage-events`를 실시간으로 읽는다.
 
 ```text
 Kafka
-  │
-  │ Event Stream
-  ▼
-Spark
-  │
-  │ Data Processing
-  ▼
+  ↓
+Spark Structured Streaming
+  ↓
 Iceberg
-  │
-  │ Table Metadata
-  ▼
-Parquet
-  │
-  │ Physical Data
-  ▼
-MinIO
+```
+
+최종 Streaming 프로그램:
+
+```text
+spark/3_12_full_pipeline.py
+```
+
+실행:
+
+```powershell
+docker exec spark `
+  /opt/spark/bin/spark-submit `
+  /opt/spark/work/3_12_full_pipeline.py
 ```
 
 ---
 
-# 3. Project Structure
+# 7. Apache Iceberg
+
+Iceberg Table:
+
+```text
+local.usage_db.usage_events
+```
+
+Iceberg는 단순한 파일 저장소가 아니라 Table의 schema, snapshot, metadata 등을 관리한다.
+
+```text
+Iceberg Table
+
+ ├── Schema
+ ├── Snapshot
+ ├── Metadata
+ └── Data Files
+        ↓
+     Parquet
+```
+
+---
+
+# 8. MinIO
+
+MinIO는 S3 호환 Object Storage 역할을 한다.
+
+Bucket:
+
+```text
+warehouse
+```
+
+구조:
+
+```text
+warehouse/
+├── usage_db/
+│   └── usage_events/
+│       ├── metadata/
+│       └── data/
+│           └── *.parquet
+│
+└── checkpoints/
+    └── full_usage_pipeline/
+```
+
+접속:
+
+```text
+http://localhost:9002
+```
+
+---
+
+# 9. event_id
+
+Phase 3에서는 `event_id`를 이용하여 하나의 이벤트를 전체 Pipeline에서 추적한다.
+
+```text
+event_id
+   │
+   ├── FastAPI
+   ├── Kafka
+   ├── Spark
+   ├── Iceberg
+   └── MinIO / Parquet
+```
+
+즉:
+
+```text
+User
+ ↓
+Keycloak
+ ↓
+FastAPI
+ ↓
+Kafka
+ ↓
+Spark
+ ↓
+Iceberg
+ ↓
+MinIO
+```
+
+하나의 이벤트가 전체 구간을 통과하는 것을 확인할 수 있다.
+
+---
+
+# 10. Pipeline Status
+
+FastAPI UI에서는 Pipeline 상태를 확인할 수 있다.
+
+```text
+FastAPI
+   ↓
+Kafka
+   ↓
+Spark
+   ↓
+Iceberg
+   ↓
+MinIO
+```
+
+예:
+
+```text
+FastAPI     COMPLETED
+Kafka       COMPLETED
+Spark       COMPLETED
+Iceberg     COMPLETED
+MinIO       COMPLETED
+```
+
+---
+
+# 11. Project Structure
 
 ```text
 03_iceberg/
@@ -128,6 +392,8 @@ MinIO
 │
 ├── keycloak/
 │   └── hdaic-realm.json
+│
+├── openldap/
 │
 ├── minio/
 │   └── Dockerfile
@@ -156,98 +422,28 @@ MinIO
 
 ---
 
-# 4. Docker Services
-
-Docker Compose로 다음 서비스를 실행한다.
+# 12. Docker Services
 
 ```text
-┌─────────────┐
-│  Keycloak   │ :8080
-└─────────────┘
-
-┌─────────────┐
-│   FastAPI   │ :8000
-└─────────────┘
-
-┌─────────────┐
-│    Kafka    │ :9092
-└─────────────┘
-
-┌─────────────┐
-│    MinIO    │
-│ API :9000   │
-│ Console:9002│
-└─────────────┘
-
-┌─────────────┐
-│    Spark    │
-│ Structured  │
-│ Streaming   │
-└─────────────┘
+OpenLDAP   :389
+Keycloak   :8080
+FastAPI    :8000
+Kafka      :9092
+MinIO      :9000 / 9002
+Spark      Structured Streaming
 ```
 
----
-
-# 5. 실행 환경
-
-Windows + Docker Desktop 기준.
-
-프로젝트 위치:
-
-```powershell
-D:\data_platform\03_iceberg
-```
-
-프로젝트 디렉터리로 이동한다.
-
-```powershell
-cd D:\data_platform\03_iceberg
-```
-
----
-
-# 6. 전체 서비스 실행
-
-처음 실행하거나 이미지가 변경된 경우:
-
-```powershell
-docker compose build
-```
-
-전체 서비스를 실행한다.
-
-```powershell
-docker compose up -d
-```
-
-실행 상태 확인:
+서비스 확인:
 
 ```powershell
 docker compose ps
 ```
 
-또는:
-
-```powershell
-docker ps
-```
-
-정상적으로 다음 컨테이너가 실행되어야 한다.
-
-```text
-keycloak
-kafka
-kafka-init
-api
-minio
-spark
-```
-
 ---
 
-# 7. 주요 접속 URL
+# 13. 주요 URL
 
-## FastAPI
+### FastAPI
 
 ```text
 http://localhost:8000
@@ -259,9 +455,7 @@ API 문서:
 http://localhost:8000/docs
 ```
 
----
-
-## Keycloak
+### Keycloak
 
 ```text
 http://localhost:8080
@@ -273,57 +467,61 @@ Realm:
 hdaic
 ```
 
----
-
-## MinIO
-
-MinIO Console:
+### MinIO
 
 ```text
 http://localhost:9002
 ```
 
-로그인:
+---
 
-```text
-Username:
-minioadmin
+# 14. 전체 실행
 
-Password:
-minioadmin123
+프로젝트 이동:
+
+```powershell
+cd D:\data_platform\03_iceberg
 ```
 
-S3 API:
+Build:
 
-```text
-http://localhost:9000
+```powershell
+docker compose build
+```
+
+실행:
+
+```powershell
+docker compose up -d
+```
+
+상태 확인:
+
+```powershell
+docker compose ps
 ```
 
 ---
 
-# 16. Phase 3-12. Full Pipeline
+# 15. Pipeline 실행
 
-Phase 3의 최종 실습이다.
+MinIO 초기화:
 
-목표:
-
-```text
-FastAPI
-   ↓
-Kafka
-   ↓
-Spark Structured Streaming
-   ↓
-Iceberg
-   ↓
-MinIO
-   ↓
-Parquet
-   ↓
-FastAPI UI
+```powershell
+docker exec spark `
+  /opt/spark/bin/spark-submit `
+  /opt/spark/work/3_3_minio_init.py
 ```
 
-실행:
+Iceberg Table 생성:
+
+```powershell
+docker exec spark `
+  /opt/spark/bin/spark-submit `
+  /opt/spark/work/3_7_create_table.py
+```
+
+Full Pipeline:
 
 ```powershell
 docker exec spark `
@@ -331,9 +529,7 @@ docker exec spark `
   /opt/spark/work/3_12_full_pipeline.py
 ```
 
-최종적으로 Spark Streaming 프로세스가 계속 실행된다.
-
-확인:
+Spark 로그:
 
 ```powershell
 docker logs -f spark
@@ -341,208 +537,25 @@ docker logs -f spark
 
 ---
 
-# 17. Full Pipeline의 event_id 추적
-
-전체 Pipeline에서는 하나의 사용량 이벤트를 `event_id`로 추적한다.
-
-예:
-
-```text
-event_id
-  │
-  ├── FastAPI
-  │
-  ├── Kafka
-  │
-  ├── Spark
-  │
-  ├── Iceberg
-  │
-  └── MinIO / Parquet
-```
-
-예시:
-
-```json
-{
-  "event_id": "a123...",
-  "event_type": "usage",
-  "user_id": "keycloak-user-id",
-  "username": "kim",
-  "service": "api",
-  "usage_type": "request",
-  "quantity": 10,
-  "timestamp": "2026-09-27T..."
-}
-```
-
-이 `event_id`가 전체 파이프라인을 연결하는 핵심 식별자이다.
-
----
-
-# 18. Pipeline Status
-
-FastAPI는 `pipeline-status` Kafka topic을 이용하여 각 단계의 처리 상태를 확인한다.
-
-```text
-pipeline-status
-       │
-       ▼
-    FastAPI
-       │
-       ▼
-      UI
-```
-
-UI에서는 다음 단계의 상태를 확인할 수 있다.
-
-```text
-FastAPI
-   ↓
-Kafka
-   ↓
-Spark
-   ↓
-Iceberg
-   ↓
-MinIO
-```
-
-예:
-
-```text
-FastAPI    COMPLETED
-Kafka      COMPLETED
-Spark      COMPLETED
-Iceberg    COMPLETED
-MinIO      COMPLETED
-```
-
----
-
-# 19. Parquet 실제 데이터 확인
-
-Iceberg의 실제 데이터는 Parquet 파일로 MinIO에 저장된다.
-
-MinIO 구조 예:
-
-```text
-warehouse
-└── usage_db
-    └── usage_events
-        ├── metadata
-        └── data
-            ├── 00000-....parquet
-            ├── 00001-....parquet
-            └── ...
-```
-
-FastAPI UI의:
-
-```text
-4. Iceberg / Parquet Data
-```
-
-영역에서 실제 Parquet 데이터를 조회할 수 있다.
-
-예:
-
-```text
-event_id     username   service   usage_type   quantity
---------------------------------------------------------
-a123...      kim        api       request      10
-```
-
-이를 통해:
-
-```text
-Kafka Event
-     ↓
-Iceberg Table
-     ↓
-Physical Parquet File
-```
-
-관계를 직접 확인할 수 있다.
-
----
-
-# 20. MinIO에서 데이터 확인
-
-브라우저:
-
-```text
-http://localhost:9002
-```
-
-로그인:
-
-```text
-minioadmin
-minioadmin123
-```
-
-Bucket:
-
-```text
-warehouse
-```
-
-Iceberg 데이터 경로:
-
-```text
-usage_db/
-└── usage_events/
-    ├── metadata/
-    └── data/
-```
-
-Streaming checkpoint:
-
-```text
-checkpoints/
-└── ...
-```
-
----
-
-# 21. Kafka Topic 확인
-
-Kafka 컨테이너 접속:
-
-```powershell
-docker exec -it kafka bash
-```
+# 16. Kafka 확인
 
 Topic 목록:
 
-```bash
-/opt/kafka/bin/kafka-topics.sh \
-  --bootstrap-server kafka:9092 \
+```powershell
+docker exec -it kafka `
+  /opt/kafka/bin/kafka-topics.sh `
+  --bootstrap-server kafka:9092 `
   --list
 ```
 
-예상:
+주요 Topic:
 
 ```text
 usage-events
 pipeline-status
 ```
 
-Topic 상세:
-
-```bash
-/opt/kafka/bin/kafka-topics.sh \
-  --bootstrap-server kafka:9092 \
-  --describe \
-  --topic usage-events
-```
-
----
-
-# 22. Kafka Event 직접 확인
-
-Consumer를 실행한다.
+Event 확인:
 
 ```powershell
 docker exec -it kafka `
@@ -552,666 +565,79 @@ docker exec -it kafka `
   --from-beginning
 ```
 
-FastAPI에서 Usage Event를 생성하면 Kafka에 JSON 이벤트가 들어온다.
-
-예:
-
-```json
-{
-  "event_id": "a123...",
-  "event_type": "usage",
-  "user_id": "...",
-  "username": "kim",
-  "service": "api",
-  "usage_type": "request",
-  "quantity": 10,
-  "timestamp": "..."
-}
-```
-
 ---
 
-# 23. Spark 로그 확인
-
-Spark Streaming 상태:
-
-```powershell
-docker logs -f spark
-```
-
-Spark 컨테이너 상태:
-
-```powershell
-docker ps
-```
-
-Spark Streaming 프로세스가 정상적으로 실행 중인지 확인한다.
-
----
-
-# 24. Full Pipeline 실행 순서
-
-처음부터 전체 실습을 실행하는 경우:
-
-### Step 1. 프로젝트 이동
-
-```powershell
-cd D:\data_platform\03_iceberg
-```
-
-### Step 2. 이미지 Build
-
-```powershell
-docker compose build
-```
-
-### Step 3. 서비스 실행
-
-```powershell
-docker compose up -d
-```
-
-### Step 4. 상태 확인
-
-```powershell
-docker compose ps
-```
-
-### Step 5. MinIO Bucket 생성
-
-```powershell
-docker exec spark `
-  /opt/spark/bin/spark-submit `
-  /opt/spark/work/3_3_minio_init.py
-```
-
-### Step 6. Iceberg Table 생성
-
-```powershell
-docker exec spark `
-  /opt/spark/bin/spark-submit `
-  /opt/spark/work/3_7_create_table.py
-```
-
-### Step 7. Full Streaming Pipeline 실행
-
-```powershell
-docker exec spark `
-  /opt/spark/bin/spark-submit `
-  /opt/spark/work/3_12_full_pipeline.py
-```
-
-### Step 8. Spark 로그 확인
-
-```powershell
-docker logs -f spark
-```
-
-### Step 9. FastAPI 접속
+# 17. 핵심 개념
 
 ```text
-http://localhost:8000
-```
+OpenLDAP
+ = User Directory
 
-### Step 10. Usage Event 생성
+Keycloak
+ = Authentication / Authorization
 
-UI에서 로그인 후 Usage Event를 생성한다.
+JWT
+ = 인증 정보 전달
 
----
-
-# 25. Spark 자동 실행 방식
-
-최종 Docker Compose에서는 Spark 컨테이너가 단순히 실행 상태만 유지하는 것이 아니라 Streaming 애플리케이션을 자동으로 실행하도록 구성할 수 있다.
-
-```yaml
-spark:
-  build:
-    context: ./spark
-    dockerfile: Dockerfile
-
-  image: local/spark-iceberg:3.5.7
-
-  container_name: spark
-
-  volumes:
-    - ./spark:/opt/spark/work
-
-  command:
-    - /opt/spark/bin/spark-submit
-    - /opt/spark/work/3_12_full_pipeline.py
-
-  depends_on:
-    kafka:
-      condition: service_healthy
-    minio:
-      condition: service_started
-
-  restart: unless-stopped
-```
-
-이렇게 구성하면:
-
-```text
-docker compose up -d
-        ↓
-Spark Container Start
-        ↓
-spark-submit
-        ↓
-3_12_full_pipeline.py
-        ↓
-Streaming 계속 실행
-```
-
-따라서 별도로 다음 명령을 실행할 필요가 없다.
-
-```powershell
-docker exec spark spark-submit ...
-```
-
----
-
-# 26. Checkpoint 주의사항
-
-Structured Streaming은 checkpoint를 사용한다.
-
-예:
-
-```text
-s3a://warehouse/checkpoints/full_usage_pipeline
-```
-
-코드를 크게 변경한 후 기존 checkpoint와 충돌하는 경우 새로운 경로를 사용한다.
-
-예:
-
-```text
-s3a://warehouse/checkpoints/full_usage_pipeline_v2
-```
-
-또는 실습 환경에서는 MinIO의 기존 checkpoint를 삭제하고 다시 시작할 수 있다.
-
-Checkpoint는 다음 정보를 기억한다.
-
-```text
-Kafka Offset
-      ↓
-Spark가 어디까지 읽었는가?
-      ↓
-다음 실행 시 어디부터 이어서 읽을 것인가?
-```
-
----
-
-# 27. Spark Java Version
-
-Apache Iceberg 라이브러리와 Spark 환경의 Java 버전을 맞추는 것이 중요하다.
-
-현재 Spark 컨테이너는 Java 17을 사용한다.
-
-확인:
-
-```powershell
-docker exec spark java -version
-```
-
-예:
-
-```text
-openjdk version "17.0.15"
-```
-
-Iceberg에서 다음 오류가 발생할 경우:
-
-```text
-UnsupportedClassVersionError
-
-class file version 61.0
-this version only recognizes class file versions up to 55.0
-```
-
-Java 11 runtime으로 Iceberg Java 17 class를 실행하려는 상황이다.
-
-따라서 Spark Dockerfile에서 Java 17을 사용하도록 구성한다.
-
----
-
-# 28. 핵심 데이터 저장 구조
-
-Phase 3에서 가장 중요한 개념이다.
-
-## Kafka
-
-Kafka는 이벤트를 저장한다.
-
-```text
-usage-events
-   │
-   ├── event 1
-   ├── event 2
-   ├── event 3
-   └── ...
-```
-
-## Spark
-
-Spark는 Kafka 이벤트를 읽고 처리한다.
-
-```text
-Kafka
-  ↓
-Spark DataFrame
-```
-
-## Iceberg
-
-Iceberg는 Data Lake Table을 관리한다.
-
-```text
-Iceberg Table
- ├── Schema
- ├── Snapshot
- ├── History
- └── Data Files
-```
-
-## Parquet
-
-실제 데이터는 Parquet 파일에 저장된다.
-
-```text
-Parquet
- ├── columnar data
- ├── event_id
- ├── username
- ├── service
- └── quantity
-```
-
-## MinIO
-
-Parquet와 Iceberg metadata/checkpoint가 Object Storage에 저장된다.
-
-```text
-MinIO
-└── warehouse
-    ├── usage_db
-    │   └── usage_events
-    │       ├── metadata
-    │       └── data
-    │           └── *.parquet
-    │
-    └── checkpoints
-```
-
----
-
-# 29. 전체 프로세스 한눈에 보기
-
-```text
-                    ┌─────────────┐
-                    │  Keycloak   │
-                    └──────┬──────┘
-                           │ JWT
-                           ▼
-                    ┌─────────────┐
-                    │   FastAPI   │
-                    └──────┬──────┘
-                           │
-                           │ event_id
-                           ▼
-                 ┌───────────────────┐
-                 │      Kafka        │
-                 │   usage-events    │
-                 └────────┬──────────┘
-                          │
-                          │ Streaming
-                          ▼
-                 ┌───────────────────┐
-                 │      Spark        │
-                 │ Structured        │
-                 │ Streaming         │
-                 └────────┬──────────┘
-                          │
-                          │ append
-                          ▼
-                 ┌───────────────────┐
-                 │ Apache Iceberg    │
-                 │ usage_events      │
-                 └────────┬──────────┘
-                          │
-                          │ physical files
-                          ▼
-                 ┌───────────────────┐
-                 │      MinIO        │
-                 │ S3 Object Storage │
-                 └────────┬──────────┘
-                          │
-                          ▼
-                    *.parquet
-
-
-Pipeline Status
-
-Kafka
-  │
-  │ pipeline-status
-  ▼
 FastAPI
-  │
-  ▼
-Web UI
-
-FastAPI → Kafka → Spark → Iceberg → MinIO
-   │         │       │        │        │
-   └─────────┴───────┴────────┴────────┘
-                 event_id
-```
-
----
-
-# 30. Phase 3에서 반드시 이해할 개념
-
-### ① Kafka ≠ Database
-
-Kafka는 주로 이벤트 스트림과 로그를 관리한다.
-
-```text
-Producer
-   ↓
-Kafka Topic
-   ↓
-Consumer
-```
-
----
-
-### ② Spark ≠ Storage
-
-Spark는 데이터를 처리하는 Engine이다.
-
-```text
-Kafka → Spark → Storage
-```
-
----
-
-### ③ Iceberg ≠ Parquet
-
-둘은 역할이 다르다.
-
-```text
-Iceberg
-  = Table Management
-
-Parquet
-  = Physical Data File
-```
-
-즉:
-
-```text
-Iceberg Table
-      │
-      ├── Metadata
-      ├── Snapshot
-      ├── History
-      │
-      └── Parquet Files
-```
-
----
-
-### ④ MinIO ≠ Iceberg
-
-MinIO는 실제 Object Storage이고 Iceberg는 그 위에서 Table을 관리한다.
-
-```text
-             Iceberg
-                │
-                ▼
-             MinIO
-                │
-        ┌───────┴────────┐
-        ▼                ▼
-    Metadata          Parquet
-```
-
----
-
-### ⑤ Checkpoint
-
-Streaming에서 처리 위치를 기억한다.
-
-```text
-Kafka Offset
-     ↓
-Checkpoint
-     ↓
-Spark Restart
-     ↓
-이어서 처리
-```
-
----
-
-# 31. Phase 3 최종 목표
-
-Phase 3의 최종 목표는 단순히 Docker 컨테이너를 실행하는 것이 아니다.
-
-다음 데이터 파이프라인을 직접 구성하고 이해하는 것이다.
-
-```text
-             Real-time Data Pipeline
-
-                 User Request
-                       │
-                       ▼
-                    FastAPI
-                       │
-                       ▼
-                     Kafka
-                       │
-                       ▼
-              Spark Structured
-                 Streaming
-                       │
-                       ▼
-                  Iceberg
-                       │
-                       ▼
-                   Parquet
-                       │
-                       ▼
-                    MinIO
-                       │
-                       ▼
-              Data Lake Storage
-```
-
-그리고 `event_id`를 이용하여 하나의 이벤트가:
-
-```text
-FastAPI
-   ↓
-Kafka
-   ↓
-Spark
-   ↓
-Iceberg
-   ↓
-MinIO
-   ↓
-Parquet
-```
-
-전체 구간을 통과하는 과정을 UI에서 확인하는 것이 Phase 3의 핵심 실습이다.
-
----
-
-# 32. 주요 명령어 요약
-
-### 전체 시작
-
-```powershell
-cd D:\data_platform\03_iceberg
-
-docker compose build
-
-docker compose up -d
-```
-
-### 상태 확인
-
-```powershell
-docker compose ps
-```
-
-### 로그
-
-```powershell
-docker logs -f spark
-```
-
-```powershell
-docker logs -f api
-```
-
-```powershell
-docker logs -f kafka
-```
-
-### MinIO Bucket
-
-```powershell
-docker exec spark `
-  /opt/spark/bin/spark-submit `
-  /opt/spark/work/3_3_minio_init.py
-```
-
-### Spark → MinIO
-
-```powershell
-docker exec spark `
-  /opt/spark/bin/spark-submit `
-  /opt/spark/work/3_4_spark_minio.py
-```
-
-### Iceberg Table 생성
-
-```powershell
-docker exec spark `
-  /opt/spark/bin/spark-submit `
-  /opt/spark/work/3_7_create_table.py
-```
-
-### Iceberg INSERT / SELECT
-
-```powershell
-docker exec spark `
-  /opt/spark/bin/spark-submit `
-  /opt/spark/work/3_8_insert_select.py
-```
-
-### Iceberg Metadata
-
-```powershell
-docker exec spark `
-  /opt/spark/bin/spark-submit `
-  /opt/spark/work/3_9_metadata.py
-```
-
-### Kafka Streaming
-
-```powershell
-docker exec spark `
-  /opt/spark/bin/spark-submit `
-  /opt/spark/work/3_10_kafka_stream.py
-```
-
-### Kafka → Iceberg
-
-```powershell
-docker exec spark `
-  /opt/spark/bin/spark-submit `
-  /opt/spark/work/3_11_kafka_to_iceberg.py
-```
-
-### Full Pipeline
-
-```powershell
-docker exec spark `
-  /opt/spark/bin/spark-submit `
-  /opt/spark/work/3_12_full_pipeline.py
-```
-
-### Spark Java 확인
-
-```powershell
-docker exec spark java -version
-```
-
-### Kafka Topic 확인
-
-```powershell
-docker exec -it kafka `
-  /opt/kafka/bin/kafka-topics.sh `
-  --bootstrap-server kafka:9092 `
-  --list
-```
-
----
-
-# 33. 서비스 종료
-
-```powershell
-docker compose down
-```
-
-Volume까지 삭제하려면:
-
-```powershell
-docker compose down -v
-```
-
-> `docker compose down -v`는 Keycloak, MinIO 등의 persistent volume도 삭제할 수 있으므로 학습 데이터가 필요한 경우 주의한다.
-
----
-
-# Phase 3 Learning Summary
-
-```text
-Phase 3
+ = Application API
 
 Kafka
-  ↓
-Real-time Event
+ = Event Stream
 
 Spark
-  ↓
-Stream Processing
+ = Stream Processing
 
 Iceberg
-  ↓
-Data Lake Table
+ = Data Lake Table
 
 Parquet
-  ↓
-Physical Data
+ = Physical Data File
 
 MinIO
-  ↓
-Object Storage
+ = Object Storage
 
 Checkpoint
-  ↓
-Streaming State
+ = Streaming 처리 상태
 
 event_id
-  ↓
-End-to-End Tracking
+ = End-to-End 추적 ID
 ```
 
-**핵심 한 문장**
+---
 
-> Kafka에서 발생한 실시간 사용량 이벤트를 Spark Structured Streaming으로 처리하고, Apache Iceberg Table로 관리하면서 실제 Parquet 데이터를 MinIO에 저장하는 Data Lake Pipeline을 Docker Compose 환경에서 구축한다.
+# 18. 최종 구조
+
+```text
+                 Authentication
+                 
+OpenLDAP
+    ↓
+Keycloak
+    ↓ JWT
+FastAPI
+    │
+    │
+    ▼
+    Data Pipeline
+
+FastAPI
+    ↓
+Kafka
+    ↓
+Spark
+    ↓
+Iceberg
+    ↓
+Parquet
+    ↓
+MinIO
+```
+
+## Phase 3 최종 목표
+
+**OpenLDAP에서 사용자를 관리하고, Keycloak으로 인증한 후, FastAPI에서 생성한 Usage Event를 Kafka → Spark → Iceberg → MinIO로 처리하는 End-to-End Data Platform을 Docker Compose 환경에서 구축한다.**
+
+특히 `event_id`를 이용하여 하나의 이벤트가 전체 Pipeline을 통과하는 과정을 확인한다.
+
+
