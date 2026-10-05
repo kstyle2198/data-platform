@@ -6,3 +6,4 @@ kafka-python
 pydantic
 minio
 pyarrow
+ldap3>=2.9.1,<3.0

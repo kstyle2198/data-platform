@@ -1,6 +1,38 @@
 services:
 
   # ==========================================================
+  # Openldap
+  # ==========================================================
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: openldap
+    environment:
+      LDAP_ORGANISATION: "Example Inc."
+      LDAP_DOMAIN: "example.org"
+      LDAP_ADMIN_PASSWORD: "${LDAP_ADMIN_PASSWORD}"
+      LDAP_CONFIG_PASSWORD: "${LDAP_CONFIG_PASSWORD}"
+      LDAP_TLS: "false"
+    ports:
+      - "389:389"
+    volumes:
+      - openldap_data:/var/lib/ldap
+      - openldap_config:/etc/ldap/slapd.d
+    networks:
+      - default
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'ldapsearch -x -H ldap://localhost:389 -D "cn=admin,dc=example,dc=org" -w "$$LDAP_ADMIN_PASSWORD" -b "dc=example,dc=org" -s base "(objectClass=*)" dn >/dev/null 2>&1'
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+    restart: unless-stopped
+
+
+  # ==========================================================
   # Keycloak
   # ==========================================================
 
@@ -25,6 +57,10 @@ services:
     volumes:
       - keycloak_data:/opt/keycloak/data
       - ./keycloak:/opt/keycloak/data/import
+    
+    depends_on:
+      openldap:
+        condition: service_healthy
 
     restart: unless-stopped
 
@@ -41,16 +77,11 @@ services:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
 
-      KAFKA_LISTENERS: >
-        PLAINTEXT://:9092,
-        CONTROLLER://:9093
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
 
-      KAFKA_ADVERTISED_LISTENERS: >
-        PLAINTEXT://kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
 
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: >
-        CONTROLLER:PLAINTEXT,
-        PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
 
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
 
@@ -142,20 +173,22 @@ services:
     environment:
 
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
-
       KEYCLOAK_ISSUER: http://localhost:8080/realms/hdaic
-
       KEYCLOAK_REALM: hdaic
-
       KEYCLOAK_CLIENT_ID: usage-api
 
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-
       KAFKA_TOPIC: usage-events
-
       PIPELINE_STATUS_TOPIC: pipeline-status
-
       MAX_PIPELINE_EVENTS: 100
+
+      LDAP_HOST: ${LDAP_HOST:-openldap}
+      LDAP_PORT: ${LDAP_PORT:-389}
+      LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=example,dc=org}
+      LDAP_USERS_DN: ${LDAP_USERS_DN:-ou=people,dc=example,dc=org}
+      LDAP_BIND_DN: ${LDAP_BIND_DN:-cn=admin,dc=example,dc=org}
+      LDAP_BIND_PASSWORD: ${LDAP_ADMIN_PASSWORD:?Set LDAP_ADMIN_PASSWORD in .env}
+      LDAP_ADMIN_ROLE: ${LDAP_ADMIN_ROLE:-ldap-admin}
 
     ports:
       - "8000:8000"
@@ -170,6 +203,9 @@ services:
 
       kafka-init:
         condition: service_completed_successfully
+
+      openldap:
+        condition: service_started
 
     restart: unless-stopped
 
@@ -245,7 +281,7 @@ services:
 # ============================================================
 
 volumes:
-
+  openldap_data:
+  openldap_config:
   keycloak_data:
-
   minio_data:

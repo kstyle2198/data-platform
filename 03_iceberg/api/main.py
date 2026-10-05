@@ -9,6 +9,15 @@ from collections import OrderedDict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
+import base64
+import hashlib
+import re
+import secrets
+
+from ldap3 import Connection, Server, SUBTREE
+from ldap3.utils.dn import escape_rdn
+from ldap3.utils.conv import escape_filter_chars
+
 import httpx
 
 from fastapi import (
@@ -42,79 +51,33 @@ import pyarrow.parquet as pq
 # Configuration
 # ============================================================
 
-KEYCLOAK_INTERNAL_URL = os.getenv(
-    "KEYCLOAK_INTERNAL_URL",
-    "http://keycloak:8080",
-)
+KEYCLOAK_INTERNAL_URL = os.getenv("KEYCLOAK_INTERNAL_URL", "http://keycloak:8080",)
+KEYCLOAK_ISSUER = os.getenv("KEYCLOAK_ISSUER", "http://localhost:8080/realms/hdaic",)
+KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM","hdaic",)
+KEYCLOAK_CLIENT_ID = os.getenv("KEYCLOAK_CLIENT_ID", "usage-api",)
 
-KEYCLOAK_ISSUER = os.getenv(
-    "KEYCLOAK_ISSUER",
-    "http://localhost:8080/realms/hdaic",
-)
+LDAP_HOST = os.getenv("LDAP_HOST", "openldap")
+LDAP_PORT = int(os.getenv("LDAP_PORT", "389"))
+LDAP_BASE_DN = os.getenv("LDAP_BASE_DN", "dc=example,dc=org")
+LDAP_USERS_DN = os.getenv("LDAP_USERS_DN", "ou=people,dc=example,dc=org",)
+LDAP_BIND_DN = os.getenv("LDAP_BIND_DN", "cn=admin,dc=example,dc=org",)
+LDAP_BIND_PASSWORD = os.getenv("LDAP_BIND_PASSWORD", "")
+LDAP_ADMIN_ROLE = os.getenv("LDAP_ADMIN_ROLE", "ldap-admin")
 
-KEYCLOAK_REALM = os.getenv(
-    "KEYCLOAK_REALM",
-    "hdaic",
-)
-
-KEYCLOAK_CLIENT_ID = os.getenv(
-    "KEYCLOAK_CLIENT_ID",
-    "usage-api",
-)
-
-
-KAFKA_BOOTSTRAP_SERVERS = os.getenv(
-    "KAFKA_BOOTSTRAP_SERVERS",
-    "kafka:9092",
-)
-
-KAFKA_TOPIC = os.getenv(
-    "KAFKA_TOPIC",
-    "usage-events",
-)
-
-PIPELINE_STATUS_TOPIC = os.getenv(
-    "PIPELINE_STATUS_TOPIC",
-    "pipeline-status",
-)
-
-MAX_PIPELINE_EVENTS = int(
-    os.getenv(
-        "MAX_PIPELINE_EVENTS",
-        "100",
-    )
-)
-
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092",)
+KAFKA_TOPIC = os.getenv("KAFKA_TOPIC","usage-events",)
+PIPELINE_STATUS_TOPIC = os.getenv("PIPELINE_STATUS_TOPIC", "pipeline-status",)
+MAX_PIPELINE_EVENTS = int(os.getenv("MAX_PIPELINE_EVENTS", "100",))
 
 # ============================================================
 # MinIO / Iceberg Configuration
 # ============================================================
 
-MINIO_ENDPOINT = os.getenv(
-    "MINIO_ENDPOINT",
-    "minio:9000",
-)
-
-MINIO_ACCESS_KEY = os.getenv(
-    "MINIO_ACCESS_KEY",
-    "minioadmin",
-)
-
-MINIO_SECRET_KEY = os.getenv(
-    "MINIO_SECRET_KEY",
-    "minioadmin123",
-)
-
-MINIO_BUCKET = os.getenv(
-    "MINIO_BUCKET",
-    "warehouse",
-)
-
-ICEBERG_TABLE_PREFIX = os.getenv(
-    "ICEBERG_TABLE_PREFIX",
-    "usage_db/usage_events",
-)
-
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000",)
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin",)
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin123",)
+MINIO_BUCKET = os.getenv("MINIO_BUCKET", "warehouse",)
+ICEBERG_TABLE_PREFIX = os.getenv("ICEBERG_TABLE_PREFIX", "usage_db/usage_events",)
 
 # ============================================================
 # Keycloak Internal URLs
@@ -141,13 +104,9 @@ KEYCLOAK_TOKEN_URL = (
 # ============================================================
 
 pipeline_status = OrderedDict()
-
 pipeline_status_lock = threading.Lock()
-
 pipeline_consumer_stop_event = threading.Event()
-
 pipeline_consumer_thread = None
-
 
 # ============================================================
 # FastAPI Models
@@ -177,6 +136,17 @@ class LoginRequest(BaseModel):
     password: str = Field(
         min_length=1
     )
+
+class LDAPUserCreate(BaseModel):
+    username: str = Field(
+        min_length=3,
+        max_length=64,
+        pattern=r"^[a-zA-Z0-9._-]+$",
+    )
+    full_name: str = Field(min_length=1, max_length=120)
+    email: str = Field(min_length=3, max_length=254)
+    department: str = Field(default="", max_length=120)
+    password: str = Field(min_length=1, max_length=128)   # 테스트 목적으로 짧게 혀용
 
 
 # ============================================================
@@ -910,6 +880,78 @@ async def get_current_user(
     return payload
 
 
+def open_ldap_connection():
+    if not LDAP_BIND_PASSWORD:
+        raise HTTPException(
+            status_code=500,
+            detail="LDAP_BIND_PASSWORD is not configured",
+        )
+
+    conn = None
+
+    try:
+        server = Server(
+            LDAP_HOST,
+            port=LDAP_PORT,
+            connect_timeout=5,
+        )
+
+        conn = Connection(
+            server,
+            user=LDAP_BIND_DN,
+            password=LDAP_BIND_PASSWORD,
+            auto_bind=True,
+            raise_exceptions=False,
+        )
+
+        if not conn.bound:
+            conn.unbind()
+            raise HTTPException(
+                status_code=503,
+                detail="OpenLDAP bind failed",
+            )
+
+        return conn
+
+    except HTTPException:
+        raise
+
+    except Exception:
+        if conn is not None:
+            try:
+                conn.unbind()
+            except Exception:
+                pass
+
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to connect to OpenLDAP",
+        )
+
+def make_ssha_password(password: str) -> str:
+    salt = secrets.token_bytes(4)
+    digest = hashlib.sha1(
+        password.encode("utf-8") + salt
+    ).digest()
+
+    encoded = base64.b64encode(digest + salt).decode("ascii")
+    return "{SSHA}" + encoded
+
+
+async def require_ldap_admin(
+    user=Depends(get_current_user),
+):
+    roles = user.get("realm_access", {}).get("roles", [])
+
+    if LDAP_ADMIN_ROLE not in roles:
+        raise HTTPException(
+            status_code=403,
+            detail="Administrator role required",
+        )
+
+    return user
+
+
 # ============================================================
 # Health
 # ============================================================
@@ -1118,6 +1160,174 @@ async def create_usage(
         },
     }
 
+
+
+@app.get("/admin/ldap/users")
+def list_ldap_users(
+    admin=Depends(require_ldap_admin),
+):
+    conn = open_ldap_connection()
+
+    try:
+        ok = conn.search(
+            search_base=LDAP_USERS_DN,
+            search_filter="(objectClass=inetOrgPerson)",
+            search_scope=SUBTREE,
+            attributes=[
+                "uid",
+                "cn",
+                "sn",
+                "givenName",
+                "mail",
+                "departmentNumber",
+            ],
+        )
+
+        if not ok and conn.result.get("result") != 0:
+            raise HTTPException(
+                status_code=502,
+                detail="LDAP user search failed",
+            )
+
+        users = []
+
+        for entry in conn.entries:
+            attrs = entry.entry_attributes_as_dict
+
+            def first_value(name):
+                values = attrs.get(name, [])
+                return str(values[0]) if values else ""
+
+            users.append({
+                "username": first_value("uid"),
+                "full_name": first_value("cn"),
+                "email": first_value("mail"),
+                "department": first_value("departmentNumber"),
+            })
+
+        return {"count": len(users), "users": users}
+
+    finally:
+        conn.unbind()
+
+# ============================================================
+# Ldap APIs
+# ============================================================
+
+
+@app.post("/admin/ldap/users", status_code=201)
+def create_ldap_user(
+    body: LDAPUserCreate,
+    admin=Depends(require_ldap_admin),
+):
+    username = body.username.strip()
+
+    if not username:
+        raise HTTPException(
+            status_code=422,
+            detail="Username cannot be blank",
+        )
+
+    full_name = body.full_name.strip()
+    if not full_name:
+        raise HTTPException(
+            status_code=422,
+            detail="Full name cannot be blank",
+        )
+
+    # DN에 삽입되는 username은 반드시 escape
+    user_dn = (
+        f"uid={escape_rdn(username)},{LDAP_USERS_DN}"
+    )
+
+    # cn은 전체 이름, sn은 마지막 이름 부분으로 구성
+    name_parts = full_name.split()
+    surname = name_parts[-1] if name_parts else username
+    given_name = name_parts[0] if name_parts else username
+
+    attributes = {
+        "uid": username,
+        "cn": full_name,
+        "sn": surname,
+        "givenName": given_name,
+        "mail": body.email.strip(),
+        "userPassword": make_ssha_password(body.password),
+    }
+
+    department = body.department.strip()
+    if department:
+        attributes["departmentNumber"] = department
+
+    conn = open_ldap_connection()
+
+    try:
+        # 중복 uid 확인
+        search_ok = conn.search(
+            search_base=LDAP_USERS_DN,
+            search_filter=(
+                "(&(objectClass=inetOrgPerson)"
+                f"(uid={escape_filter_chars(username)}))"
+            ),
+            search_scope=SUBTREE,
+            attributes=["uid"],
+        )
+
+        if not search_ok:
+            result_code = conn.result.get("result", -1)
+
+            # LDAP 성공 결과인데 검색 결과가 없는 경우는
+            # 정상적인 빈 검색일 수 있으므로 result code로 판단
+            if result_code != 0:
+                raise HTTPException(
+                    status_code=502,
+                    detail="LDAP duplicate-user search failed",
+                )
+
+        if conn.entries:
+            raise HTTPException(
+                status_code=409,
+                detail="Username already exists",
+            )
+        
+        conn.add(
+            user_dn,
+            object_class=[
+                "top",
+                "person",
+                "organizationalPerson",
+                "inetOrgPerson",
+            ],
+            attributes=attributes,
+        )
+
+        result_code = conn.result.get("result", -1)
+
+        if result_code != 0:
+            if result_code == 68:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Username already exists",
+                )
+
+            # LDAP 내부 상세 오류를 외부에 그대로 노출하지 않음
+            print(
+                "[LDAP] Add user failed:",
+                conn.result.get("description"),
+                conn.result.get("message"),
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="OpenLDAP rejected the user entry",
+            )
+
+        return {
+            "message": "LDAP user created successfully",
+            "username": username,
+            "dn": user_dn,
+        }
+
+    finally:
+        conn.unbind()
 
 # ============================================================
 # Pipeline Monitoring APIs
