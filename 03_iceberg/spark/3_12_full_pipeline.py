@@ -49,9 +49,7 @@ KAFKA_SOURCE_TOPIC = "usage-events"
 KAFKA_STATUS_TOPIC = "pipeline-status"
 
 ICEBERG_TABLE = ("local.usage_db.usage_events")
-ICEBERG_WAREHOUSE = (
-    "s3a://warehouse/"
-)
+ICEBERG_WAREHOUSE = ("s3a://warehouse/")
 
 CHECKPOINT_LOCATION = (
     "s3a://warehouse/"
@@ -78,9 +76,9 @@ spark = (
     # Iceberg
     # --------------------------------------------------------
     .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",)
-    .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog",)
+    .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog",) #local이라는 Catalog를 Iceberg Catalog로 사용
     .config("spark.sql.catalog.local.type","hadoop",)
-    .config("spark.sql.catalog.local.warehouse", ICEBERG_WAREHOUSE,)
+    .config("spark.sql.catalog.local.warehouse", ICEBERG_WAREHOUSE,) # Iceberg의 Warehouse를 MinIO의 warehouse Bucket으로 지정
 
     # --------------------------------------------------------
     # S3A / MinIO
