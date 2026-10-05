@@ -3,3 +3,6 @@ venv/
 
 .env
 04_output_review/
+
+metastore_db
+*.log
