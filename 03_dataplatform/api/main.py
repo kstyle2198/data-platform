@@ -99,6 +99,12 @@ KEYCLOAK_TOKEN_URL = (
 )
 
 
+ICEBERG_QUERY_URL = os.getenv(
+    "ICEBERG_QUERY_URL",
+    "http://iceberg-query:8010",
+)
+
+
 # ============================================================
 # Runtime state
 # ============================================================
@@ -1909,6 +1915,92 @@ async def get_recent_parquet(
                 f"Parquet data: {exc}"
             ),
         )
+
+
+# ============================================================
+# Iceberg Time Travel APIs
+# ============================================================
+
+async def request_iceberg_query(path: str, params=None):
+    url = f"{ICEBERG_QUERY_URL}{path}"
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=120.0
+        ) as client:
+            response = await client.get(
+                url,
+                params=params,
+            )
+
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Iceberg query service unavailable: "
+                f"{exc}"
+            ),
+        )
+
+    if response.is_error:
+        try:
+            detail = response.json().get(
+                "detail",
+                response.text,
+            )
+        except ValueError:
+            detail = response.text
+
+        status_code = (
+            response.status_code
+            if response.status_code in (400, 404)
+            else 502
+        )
+
+        raise HTTPException(
+            status_code=status_code,
+            detail=detail,
+        )
+
+    return response.json()
+
+
+@app.get("/iceberg/snapshots")
+async def iceberg_snapshots(
+    user=Depends(get_current_user),
+):
+    """Iceberg 스냅샷 목록 조회."""
+    return await request_iceberg_query(
+        "/snapshots"
+    )
+
+
+@app.get("/iceberg/time-travel")
+async def iceberg_time_travel(
+    snapshot_id: str,
+    limit: int = 100,
+    user=Depends(get_current_user),
+):
+    """선택한 스냅샷 기준으로 Iceberg 데이터를 조회."""
+    if not snapshot_id.isdigit():
+        raise HTTPException(
+            status_code=400,
+            detail="snapshot_id must be an integer",
+        )
+
+    if limit < 1 or limit > 200:
+        raise HTTPException(
+            status_code=400,
+            detail="limit must be between 1 and 200",
+        )
+
+    return await request_iceberg_query(
+        "/time-travel",
+        params={
+            "snapshot_id": snapshot_id,
+            "limit": limit,
+        },
+    )
 
 
 # ============================================================
