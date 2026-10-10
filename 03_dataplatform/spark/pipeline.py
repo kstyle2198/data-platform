@@ -8,20 +8,35 @@ from common.schema import EVENT_SCHEMA, EVENT_COLUMNS
 from common.spark_factory import create_spark
 
 
+
 def initialize_minio_bucket() -> None:
-    # MinIO's Python SDK expects host:port, not an http:// URL.
-    endpoint = settings.minio_endpoint.removeprefix("http://").removeprefix("https://")
+    """Ensure the configured MinIO bucket exists."""
+    endpoint = settings.minio_endpoint.strip()
+
+    if endpoint.startswith("http://"):
+        endpoint = endpoint[len("http://"):]
+    elif endpoint.startswith("https://"):
+        endpoint = endpoint[len("https://"):]
+
     client = Minio(
         endpoint,
         access_key=settings.minio_access_key,
         secret_key=settings.minio_secret_key,
         secure=settings.minio_secure,
     )
+
     if not client.bucket_exists(settings.minio_bucket):
         client.make_bucket(settings.minio_bucket)
-        print(f"[MinIO] Created bucket: {settings.minio_bucket}", flush=True)
+        print(
+            f"[MinIO] Created bucket: {settings.minio_bucket}",
+            flush=True,
+        )
     else:
-        print(f"[MinIO] Bucket exists: {settings.minio_bucket}", flush=True)
+        print(
+            f"[MinIO] Bucket exists: {settings.minio_bucket}",
+            flush=True,
+        )
+
 
 
 def ensure_iceberg_table(spark) -> None:
@@ -205,7 +220,7 @@ def main():
     try:
         # Ensure the Iceberg table exists
         ensure_iceberg_table(spark)
-        
+
         # Read from Kafka
         kafka_df = (
             spark.readStream.format("kafka")
