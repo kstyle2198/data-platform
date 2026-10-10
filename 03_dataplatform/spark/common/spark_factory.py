@@ -4,6 +4,7 @@ from common.config import settings
 
 
 def create_spark(app_name: str) -> SparkSession:
+    """Create a SparkSession configured for Iceberg and MinIO."""
     return (
         SparkSession.builder
         .appName(app_name)

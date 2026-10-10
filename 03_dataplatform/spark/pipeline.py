@@ -25,6 +25,7 @@ def initialize_minio_bucket() -> None:
 
 
 def ensure_iceberg_table(spark) -> None:
+    """Ensure the Iceberg table exists, creating it if necessary. This is idempotent."""
     spark.sql("CREATE NAMESPACE IF NOT EXISTS local.usage_db")
     spark.sql(f"""
         CREATE TABLE IF NOT EXISTS {settings.iceberg_table} (
@@ -42,6 +43,7 @@ def ensure_iceberg_table(spark) -> None:
 
 
 def latest_snapshot_id(spark):
+    """Return the latest snapshot ID for the Iceberg table, or None if no snapshots exist."""
     try:
         row = spark.sql(f"""
             SELECT snapshot_id
@@ -57,6 +59,7 @@ def latest_snapshot_id(spark):
 
 
 def list_iceberg_parquet_files(spark):
+    """List Parquet files for the Iceberg table in MinIO. Returns (path, list of files)."""
     path_text = (
         f"s3a://{settings.minio_bucket}/"
         f"{settings.minio_table_prefix.strip('/')}/data/"
@@ -108,6 +111,7 @@ def publish_status(spark, event_ids, stage, status, **extra):
 
 
 def publish_status_best_effort(spark, event_ids, stage, status, **extra):
+    """Publish status, but log and continue if it fails."""
     try:
         publish_status(spark, event_ids, stage, status, **extra)
     except Exception as exc:
@@ -116,6 +120,7 @@ def publish_status_best_effort(spark, event_ids, stage, status, **extra):
 
 
 def process_batch(spark, batch_df, batch_id):
+    """Process a single micro-batch of events."""
     print(f"\n[Batch] batch_id={batch_id}", flush=True)
     if batch_df.isEmpty():
         print("[Batch] Empty batch", flush=True)
@@ -192,12 +197,16 @@ def process_batch(spark, batch_df, batch_id):
 
 
 def main():
+    """Run the Spark Structured Streaming pipeline."""
     initialize_minio_bucket()
     spark = create_spark("Phase3-12-Full-Pipeline")
     spark.sparkContext.setLogLevel("WARN")
     query = None
     try:
+        # Ensure the Iceberg table exists
         ensure_iceberg_table(spark)
+        
+        # Read from Kafka
         kafka_df = (
             spark.readStream.format("kafka")
             .option("kafka.bootstrap.servers", settings.kafka_bootstrap_servers)
@@ -206,6 +215,7 @@ def main():
             .option("failOnDataLoss", "false")
             .load()
         )
+        # Parse the JSON payload and filter out invalid events
         parsed_df = (
             kafka_df.selectExpr("CAST(value AS STRING) AS json")
             .select(from_json(col("json"), EVENT_SCHEMA).alias("data"))
@@ -214,6 +224,7 @@ def main():
         )
 
         print("[Streaming] Starting query", flush=True)
+        # Start the streaming query with foreachBatch to process each micro-batch
         query = (
             parsed_df.writeStream
             .foreachBatch(lambda df, batch_id: process_batch(spark, df, batch_id))
@@ -221,6 +232,7 @@ def main():
             .trigger(processingTime=settings.processing_interval)
             .start()
         )
+        # Wait for the streaming query to finish (or be interrupted)
         query.awaitTermination()
     except KeyboardInterrupt:
         print("[Streaming] Stop requested", flush=True)
