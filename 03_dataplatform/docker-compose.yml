@@ -187,6 +187,7 @@ services:
       context: ./spark
       dockerfile: Dockerfile
     image: local/spark-iceberg:3.5.7
+    pull_policy: build
     container_name: spark
     environment:
       PYTHONPATH: "/opt/spark/work"
@@ -222,7 +223,11 @@ services:
   # Refactored query_api.py uses common/* from same mounted ./spark directory.
   # ==========================================================
   iceberg-query:
+    build:
+      context: ./spark
+      dockerfile: Dockerfile
     image: local/spark-iceberg:3.5.7
+    pull_policy: build
     container_name: iceberg-query
     environment:
       PYTHONPATH: "/opt/spark/work"
