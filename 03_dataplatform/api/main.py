@@ -2077,14 +2077,3 @@ async def iceberg_clear(
         )
 
     return await request_iceberg_clear(confirmation)
-
-# ============================================================
-# Web UI
-# ============================================================
-
-@app.get("/")
-async def index():
-
-    return FileResponse(
-        "static/index.html"
-    )
