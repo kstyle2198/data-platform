@@ -23,6 +23,7 @@ import httpx
 from fastapi import (
     Depends,
     FastAPI,
+    Body,
     HTTPException,
     status,
 )
@@ -1964,6 +1965,43 @@ async def request_iceberg_query(path: str, params=None):
 
     return response.json()
 
+async def request_iceberg_clear(confirmation: str):
+    try:
+        async with httpx.AsyncClient(
+            timeout=180.0
+        ) as client:
+            response = await client.post(
+                f"{ICEBERG_QUERY_URL}/clear",
+                json={"confirmation": confirmation},
+            )
+
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Iceberg query service unavailable: {exc}",
+        )
+
+    if response.is_error:
+        try:
+            detail = response.json().get(
+                "detail",
+                response.text,
+            )
+        except ValueError:
+            detail = response.text
+
+        status_code = (
+            response.status_code
+            if response.status_code in (400, 404, 413)
+            else 502
+        )
+
+        raise HTTPException(
+            status_code=status_code,
+            detail=detail,
+        )
+
+    return response.json()
 
 @app.get("/iceberg/snapshots")
 async def iceberg_snapshots(
@@ -2002,6 +2040,43 @@ async def iceberg_time_travel(
         },
     )
 
+def has_data_admin_role(user) -> bool:
+    if not isinstance(user, dict):
+        return False
+
+    roles = set(user.get("roles") or [])
+
+    realm_access = user.get("realm_access") or {}
+    roles.update(realm_access.get("roles") or [])
+
+    # 프로젝트에서 사용하는 관리자 역할을 확인합니다.
+    allowed_roles = {
+        "ldap-admin",
+        "data-admin",
+        "platform-admin",
+        "realm-admin",
+    }
+
+    return bool(roles.intersection(allowed_roles))
+
+@app.post("/iceberg/clear")
+async def iceberg_clear(
+    confirmation: str = Body(..., embed=True),
+    user=Depends(get_current_user),
+):
+    if not has_data_admin_role(user):
+        raise HTTPException(
+            status_code=403,
+            detail="Administrator role required",
+        )
+    
+    if confirmation != "DELETE ALL ROWS":
+        raise HTTPException(
+            status_code=400,
+            detail="Confirmation text does not match",
+        )
+
+    return await request_iceberg_clear(confirmation)
 
 # ============================================================
 # Web UI
