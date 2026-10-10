@@ -62,6 +62,23 @@ services:
     restart: "no"
 
   # ==========================================================
+  # phpLDAPadmin
+  # ==========================================================
+
+  phpldapadmin:
+    image: osixia/phpldapadmin:0.9.0
+    container_name: phpldapadmin
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: openldap
+      PHPLDAPADMIN_HTTPS: "false"
+    ports:
+      - "8081:80"
+    depends_on:
+      openldap:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ==========================================================
   # Keycloak
   # ==========================================================
   keycloak:
