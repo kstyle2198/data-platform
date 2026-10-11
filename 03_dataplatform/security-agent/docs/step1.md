@@ -1,5 +1,14 @@
 # Security Agent 실습 현황
 
+## 0. test 방법
+
+```bash
+docker logs -f security-agent  # 실시간 모니터링 준비 
+
+python test_security_events.py   # 테스트 이벤트 실행
+
+```
+
 ## 1. 목표
 
 기존 데이터 플랫폼에 **보안 이벤트 탐지 및 자동 대응 기능**을 추가합니다.

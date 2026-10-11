@@ -214,6 +214,7 @@ def process_batch(spark, batch_df, batch_id):
 def main():
     """Run the Spark Structured Streaming pipeline."""
     initialize_minio_bucket()
+    # Create Spark session with Catalog and MinIO configuration
     spark = create_spark("Phase3-12-Full-Pipeline")
     spark.sparkContext.setLogLevel("WARN")
     query = None

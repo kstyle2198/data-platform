@@ -1,5 +1,4 @@
 services:
-
   # ==========================================================
 
   # OpenLDAP
@@ -7,13 +6,11 @@ services:
   # ==========================================================
 
   openldap:
-
     image: osixia/openldap:1.5.0
 
     container_name: openldap
 
     environment:
-
       LDAP_ORGANISATION: "Example Inc."
 
       LDAP_DOMAIN: "example.org"
@@ -25,19 +22,15 @@ services:
       LDAP_TLS: "false"
 
     ports:
-
       - "389:389"
 
     volumes:
-
       - openldap_data:/var/lib/ldap
 
       - openldap_config:/etc/ldap/slapd.d
 
     healthcheck:
-
       test:
-
         - CMD-SHELL
 
         - 'ldapsearch -x -H ldap\://localhost:389 -D "cn=admin,dc=example,dc=org" -w "$$LDAP_ADMIN_PASSWORD" -b "dc=example,dc=org" -s base "(objectClass=\*)" dn >/dev/null 2>&1'
@@ -51,8 +44,6 @@ services:
       start_period: 30s
 
     restart: unless-stopped
-
-
 
   # ==========================================================
 
@@ -104,40 +95,30 @@ services:
 
     restart: "no"
 
-
   # ==========================================================
 
   # phpLDAPadmin
 
   # ==========================================================
 
-
-
   phpldapadmin:
-
     image: osixia/phpldapadmin:0.9.0
 
     container_name: phpldapadmin
 
     environment:
-
       PHPLDAPADMIN_LDAP_HOSTS: openldap
 
       PHPLDAPADMIN_HTTPS: "false"
 
     ports:
-
       - "8081:80"
 
     depends_on:
-
       openldap:
-
         condition: service_healthy
 
     restart: unless-stopped
-
-
 
   # ==========================================================
 
@@ -146,19 +127,16 @@ services:
   # ==========================================================
 
   keycloak:
-
     image: quay.io/keycloak/keycloak:26.7.4
 
     container_name: keycloak
 
     command:
-
       - start-dev
 
       - --import-realm
 
     environment:
-
       KC_BOOTSTRAP_ADMIN_USERNAME: "${KEYCLOAK_ADMIN_USERNAME:-admin}"
 
       KC_BOOTSTRAP_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD:?Set KEYCLOAK_ADMIN_PASSWORD in .env}"
@@ -168,24 +146,18 @@ services:
       KC_HOSTNAME: "http://localhost:8080"
 
     ports:
-
       - "8080:8080"
 
     volumes:
-
       - keycloak_data:/opt/keycloak/data
 
       - ./keycloak:/opt/keycloak/data/import:ro
 
     depends_on:
-
       openldap:
-
         condition: service_healthy
 
     restart: unless-stopped
-
-
 
   # ==========================================================
   # Keycloak LDAP User Federation Initialization
@@ -222,13 +194,11 @@ services:
   # ==========================================================
 
   kafka:
-
     image: apache/kafka:3.9.0
 
     container_name: kafka
 
     environment:
-
       KAFKA_NODE_ID: 1
 
       KAFKA_PROCESS_ROLES: "broker,controller"
@@ -258,13 +228,10 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
 
     ports:
-
       - "9092:9092"
 
     healthcheck:
-
       test:
-
         - CMD-SHELL
 
         - "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"
@@ -279,8 +246,6 @@ services:
 
     restart: unless-stopped
 
-
-
   # ==========================================================
 
   # Kafka Topic Initialization
@@ -288,21 +253,17 @@ services:
   # ==========================================================
 
   kafka-init:
-
     image: apache/kafka:3.9.0
 
     container_name: kafka-init
 
     depends_on:
-
       kafka:
-
         condition: service_healthy
 
     entrypoint: ["/bin/bash", "-ec"]
 
     command:
-
       - |
 
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic usage-events --partitions 3 --replication-factor 1
@@ -315,8 +276,6 @@ services:
 
     restart: "no"
 
-
-
   # ==========================================================
 
   # MinIO
@@ -324,9 +283,7 @@ services:
   # ==========================================================
 
   minio:
-
     build:
-
       context: ./minio
 
       dockerfile: Dockerfile
@@ -336,13 +293,11 @@ services:
     container_name: minio
 
     environment:
-
       MINIO_ROOT_USER: "${MINIO_ROOT_USER:-minioadmin}"
 
       MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}"
 
     command:
-
       - server
 
       - /data
@@ -352,18 +307,14 @@ services:
       - ":9001"
 
     ports:
-
       - "9000:9000"
 
       - "9002:9001"
 
     volumes:
-
       - minio_data:/data
 
     restart: unless-stopped
-
-
 
   # ==========================================================
 
@@ -376,9 +327,7 @@ services:
   # ==========================================================
 
   spark:
-
     build:
-
       context: ./spark
 
       dockerfile: Dockerfile
@@ -390,7 +339,6 @@ services:
     container_name: spark
 
     environment:
-
       PYTHONPATH: "/opt/spark/work"
 
       PYTHONUNBUFFERED: "1"
@@ -420,32 +368,24 @@ services:
       PROCESSING_INTERVAL: "5 seconds"
 
     volumes:
-
       - ./spark:/opt/spark/work
 
     command:
-
       - /opt/spark/bin/spark-submit
 
       - /opt/spark/work/pipeline.py
 
     depends_on:
-
       kafka:
-
         condition: service_healthy
 
       kafka-init:
-
         condition: service_completed_successfully
 
       minio:
-
         condition: service_started
 
     restart: unless-stopped
-
-
 
   # ==========================================================
 
@@ -456,9 +396,7 @@ services:
   # ==========================================================
 
   iceberg-query:
-
     build:
-
       context: ./spark
 
       dockerfile: Dockerfile
@@ -470,7 +408,6 @@ services:
     container_name: iceberg-query
 
     environment:
-
       PYTHONPATH: "/opt/spark/work"
 
       PYTHONUNBUFFERED: "1"
@@ -494,32 +431,24 @@ services:
       MINIO_TABLE_PREFIX: "usage_db/usage_events"
 
     volumes:
-
       - ./spark:/opt/spark/work
 
     command:
-
       - /opt/spark/bin/spark-submit
 
       - /opt/spark/work/query_api.py
 
     expose:
-
       - "8010"
 
     depends_on:
-
       minio:
-
         condition: service_started
 
       spark:
-
         condition: service_started
 
     restart: unless-stopped
-
-
 
   # ==========================================================
 
@@ -528,9 +457,7 @@ services:
   # ==========================================================
 
   api:
-
     build:
-
       context: ./api
 
       dockerfile: Dockerfile
@@ -540,7 +467,6 @@ services:
     container_name: api
 
     environment:
-
       KEYCLOAK_INTERNAL_URL: "http://keycloak:8080"
 
       KEYCLOAK_ISSUER: "http://localhost:8080/realms/hdaic"
@@ -574,42 +500,31 @@ services:
       ICEBERG_QUERY_URL: "http://iceberg-query:8010"
 
     ports:
-
       - "8000:8000"
 
     depends_on:
-
       keycloak:
-
         condition: service_started
 
       keycloak-ldap-init:
-
         condition: service_completed_successfully
 
       kafka:
-
         condition: service_healthy
 
       kafka-init:
-
         condition: service_completed_successfully
 
       openldap:
-
         condition: service_healthy
 
       openldap-init:
-
         condition: service_completed_successfully
 
       iceberg-query:
-
         condition: service_started
 
     restart: unless-stopped
-
-
 
   # ==========================================================
 
@@ -618,9 +533,7 @@ services:
   # ==========================================================
 
   frontend:
-
     build:
-
       context: ./frontend
 
       dockerfile: Dockerfile
@@ -630,18 +543,13 @@ services:
     container_name: frontend
 
     ports:
-
       - "3000:3000"
 
     depends_on:
-
       api:
-
         condition: service_started
 
     restart: unless-stopped
-
-
 
   # ==========================================================
 
@@ -650,9 +558,7 @@ services:
   # ==========================================================
 
   security-agent:
-
     build:
-
       context: ./security-agent
 
       dockerfile: Dockerfile
@@ -660,7 +566,6 @@ services:
     container_name: security-agent
 
     environment:
-
       KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
 
       SECURITY_TOPIC: "security-events"
@@ -672,21 +577,15 @@ services:
       BRUTE_FORCE_WINDOW_SECONDS: "60"
 
     depends_on:
-
       kafka:
-
         condition: service_healthy
 
       kafka-init:
-
         condition: service_completed_successfully
 
     restart: unless-stopped
 
-
-
 volumes:
-
   openldap_data:
 
   openldap_config:
