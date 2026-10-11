@@ -1,211 +1,206 @@
-# 03. Data Platform
+# Mini Data Platform 프로젝트
 
-Docker Compose 기반으로 인증, 이벤트 스트리밍, 데이터 처리 및 Lakehouse 저장 과정을 학습하는 프로젝트입니다.
+Kafka, Spark Structured Streaming, Apache Iceberg, MinIO, FastAPI, Next.js, Keycloak, OpenLDAP을 Docker Compose로 연동하는 데이터 플랫폼 실습 프로젝트입니다.
 
-- Repository: https://github.com/kstyle2198/data-platform
-- Project directory: `03_dataplatform/`
-- 기존 디렉터리명: `03_iceberg`
+## 1. 프로젝트 구조
 
-## 프로젝트 개요
+```text
+03_dataplatform/
+├── .env                         # 서비스 계정 및 비밀번호 등 환경 변수
+├── docker-compose.yml           # 전체 서비스 정의 및 실행 설정
+├── people.ldif                  # OpenLDAP 초기 OU/엔트리 정의
+├── keycloak-ldap-init.sh        # Keycloak LDAP User Federation 초기화 스크립트
+├── keycloak/
+│   └── hdaic-realm.json          # Keycloak realm import 설정
+├── minio/
+│   └── Dockerfile                # MinIO 이미지 빌드 설정
+├── spark/
+│   ├── Dockerfile                # Spark + Iceberg 실행 이미지
+│   ├── pipeline.py               # Kafka → Spark → Iceberg 데이터 파이프라인
+│   ├── query_api.py              # Iceberg 조회 및 스냅샷 비교 API
+│   └── common/
+│       ├── config.py             # 공통 환경 설정
+│       ├── schema.py             # 이벤트 스키마 및 컬럼 정의
+│       └── spark_factory.py      # SparkSession 생성 및 Iceberg 설정
+├── api/
+│   ├── Dockerfile                # FastAPI 이미지 빌드 설정
+│   ├── main.py                   # REST API, 인증 및 파이프라인 연동
+│   └── requirements.txt          # Python 의존성
+├── frontend/
+│   ├── Dockerfile                # Next.js 이미지 빌드 설정
+│   ├── package.json              # 프런트엔드 의존성 및 스크립트
+│   ├── next.config.mjs           # Next.js 설정
+│   └── app/
+│       ├── layout.tsx            # 공통 레이아웃
+│       ├── page.tsx              # 메인 파이프라인 UI
+│       ├── globals.css            # 전역 스타일
+│       └── time-travel/
+│           └── page.tsx           # Iceberg Snapshot/Time Travel UI
+├── security-agent/
+│   ├── Dockerfile                # 보안 에이전트 이미지 빌드 설정
+│   └── ...                       # Kafka 보안 이벤트 소비 및 탐지 로직
+└── docs/
+    ├── data-pipeline.md          # 데이터 파이프라인 설명
+    ├── ldap-keycloak.md          # LDAP/Keycloak 연동 설명
+    └── ui_to_fastapi_jwt.md      # UI와 FastAPI JWT 인증 연동 설명
+```
 
-이 프로젝트는 OpenLDAP과 Keycloak을 이용한 사용자 인증 환경, FastAPI 기반 API, Kafka 이벤트 메시징, Spark Structured Streaming 처리, Apache Iceberg 테이블 관리, MinIO 객체 저장소를 하나의 로컬 환경에서 연동합니다.
+> 참고: 디렉터리 및 파일 구성은 프로젝트에서 공유된 구조를 바탕으로 정리했습니다. 실제 체크아웃한 저장소의 파일명이나 추가 파일은 로컬 트리와 대조해 주세요.
 
-핵심은 애플리케이션에서 발생한 이벤트가 Kafka를 거쳐 Spark에서 처리되고, Iceberg 테이블로 저장된 뒤 MinIO의 데이터 파일과 메타데이터로 관리되는 과정을 직접 확인하는 것입니다.
+## 2. 로컬 서비스 접속 링크
 
-## 주요 구성 요소
+| 서비스 | 접속 링크 | 용도 |
+|---|---|---|
+| Next.js Frontend | [http://localhost:3000](http://localhost:3000) | 파이프라인 모니터링 및 데이터 플랫폼 UI |
+| Iceberg Time Travel UI | [http://localhost:3000/time-travel](http://localhost:3000/time-travel) | Iceberg 스냅샷 조회 및 비교 UI |
+| FastAPI | [http://localhost:8000](http://localhost:8000) | 백엔드 REST API |
+| FastAPI Swagger UI | [http://localhost:8000/docs](http://localhost:8000/docs) | REST API 문서 및 테스트 |
+| FastAPI ReDoc | [http://localhost:8000/redoc](http://localhost:8000/redoc) | REST API 문서 |
+| Keycloak | [http://localhost:8080](http://localhost:8080) | 로그인, Realm 및 사용자 인증 관리 |
+| phpLDAPadmin | [http://localhost:8081](http://localhost:8081) | OpenLDAP 디렉터리 관리 UI |
+| MinIO API | [http://localhost:9000](http://localhost:9000) | S3 호환 객체 스토리지 API |
+| MinIO Console | [http://localhost:9002](http://localhost:9002) | 객체 스토리지 관리 UI |
 
-| 구성 요소 | 역할 |
+### 브라우저에서 직접 접속할 수 없는 내부 서비스
+
+| 서비스 | Docker 내부 주소 | 설명 |
+|---|---|---|
+| OpenLDAP | `openldap:389` | LDAP 디렉터리 서비스. 호스트에서는 `localhost:389` 포트로 연결 가능 |
+| Kafka | `kafka:29092` | Docker 네트워크 내부 클라이언트용 Kafka 주소 |
+| Kafka 외부 리스너 | `localhost:9092` | 호스트에서 실행하는 Kafka 클라이언트용 주소 |
+| Iceberg Query API | `http://iceberg-query:8010` | FastAPI가 사용하는 내부 Iceberg 조회 서비스 |
+| Spark | `spark` | Structured Streaming 파이프라인 실행 서비스 |
+| Security Agent | `security-agent` | Kafka 보안 이벤트를 소비하는 보안 탐지 서비스 |
+
+> `http://iceberg-query:8010`은 Docker Compose 네트워크 내부 주소입니다. 현재 Compose 설정에는 호스트용 `ports` 매핑이 아니라 `expose: 8010`이 있으므로 일반 브라우저에서 `localhost:8010`으로 접속할 수 없습니다.
+
+## 3. Docker Compose 서비스와 역할
+
+| 서비스 | 주요 역할 | 연결 관계 |
+|---|---|---|
+| `openldap` | 사용자 디렉터리 및 LDAP 인증 데이터 저장 | Keycloak, FastAPI |
+| `openldap-init` | `people.ldif`를 사용해 LDAP 초기 OU 구성 | OpenLDAP |
+| `phpldapadmin` | LDAP 디렉터리 브라우저 UI 제공 | OpenLDAP |
+| `keycloak` | Realm 기반 인증 및 토큰 발급 | OpenLDAP, Frontend, FastAPI |
+| `keycloak-ldap-init` | `hdaic` Realm의 LDAP User Federation 설정 초기화 | Keycloak, OpenLDAP |
+| `kafka` | 이벤트 스트리밍 메시지 브로커 | FastAPI, Spark, Security Agent |
+| `kafka-init` | Kafka 토픽 생성 | Kafka |
+| `minio` | Iceberg 데이터 파일과 체크포인트 저장 | Spark, Iceberg Query API |
+| `spark` | Kafka 이벤트 처리 및 Iceberg 테이블 적재 | Kafka, MinIO |
+| `iceberg-query` | Iceberg 테이블 조회 및 스냅샷 비교 기능 제공 | Spark 설정, MinIO, FastAPI |
+| `api` | 인증 검증, 이벤트 API, 파이프라인 상태 및 조회 API | Keycloak, Kafka, LDAP, Iceberg Query API |
+| `frontend` | 사용자 인터페이스 | FastAPI |
+| `security-agent` | 보안 이벤트 소비 및 임계값 기반 탐지 | Kafka |
+
+## 4. 데이터 파이프라인
+
+```text
+[Frontend :3000]
+       |
+       | HTTP API / 인증 토큰
+       v
+[FastAPI :8000] <------> [Keycloak :8080]
+       |                         |
+       |                         v
+       |                    [OpenLDAP :389]
+       |
+       +---- 이벤트 발행 ----> [Kafka]
+       |                         |
+       |                         v
+       |               [Spark Structured Streaming]
+       |                         |
+       |                         v
+       |                 [Iceberg Table]
+       |                         |
+       |                         v
+       |                      [MinIO]
+       |
+       +---- 조회 요청 ----> [Iceberg Query API :8010]
+
+[Kafka: security-events] ----> [Security Agent]
+[Kafka: pipeline-status] ----> [FastAPI] ----> [Frontend]
+```
+
+### Kafka 토픽
+
+| 토픽 | 목적 |
 |---|---|
-| Docker Compose | 여러 서비스를 하나의 로컬 환경에서 실행하고 연결 |
-| OpenLDAP | 사용자 디렉터리 및 LDAP 사용자 정보 관리 |
-| Keycloak | 로그인, Realm/Client 설정, 토큰 발급 및 LDAP 연동 |
-| FastAPI | API 제공, 인증 토큰 검증, 이벤트 발행 및 파이프라인 연동 |
-| Kafka | 애플리케이션 이벤트와 파이프라인 상태 메시지 전달 |
-| Spark Structured Streaming | Kafka 이벤트를 읽어 마이크로배치 단위로 처리 |
-| Apache Iceberg | 테이블 스키마, 스냅샷 및 메타데이터 관리 |
-| MinIO | S3 호환 객체 저장소. Parquet 데이터 파일과 Iceberg 메타데이터 저장 |
-| 웹 UI | 이벤트와 파이프라인 상태 등 실습 정보를 확인하는 화면 |
+| `usage-events` | 사용량 이벤트를 Spark 파이프라인으로 전달 |
+| `pipeline-status` | 파이프라인 처리 상태를 전달 |
+| `security-events` | 보안 관련 이벤트 전달 |
 
-## 데이터 처리 흐름
+Compose 설정상 각 토픽은 파티션 3개, 복제 계수 1로 생성됩니다.
 
-```text
-OpenLDAP
-   │ 사용자 정보
-   ▼
-Keycloak ── 인증 토큰 ──> FastAPI / 웹 UI
-                              │
-                              │ Usage Event
-                              ▼
-                         Kafka
-                     usage-events
-                              │
-                              ▼
-                 Spark Structured Streaming
-                              │
-                              ▼
-                    Apache Iceberg Table
-                    local.usage_db.usage_events
-                              │
-                              ▼
-                            MinIO
-                     Parquet + Metadata
-```
+### Iceberg 및 MinIO 설정
 
-파이프라인 상태 메시지는 `pipeline-status` 토픽을 통해 전달될 수 있습니다.
+- Iceberg 테이블: `local.usage_db.usage_events`
+- Warehouse 경로: `s3a://warehouse/`
+- MinIO 내부 엔드포인트: `http://minio:9000`
+- MinIO 호스트 API: `http://localhost:9000`
+- MinIO Console: `http://localhost:9002`
+- Spark 체크포인트: `s3a://warehouse/checkpoints/full_usage_pipeline`
 
-### 처리 단계
+## 5. 실행 및 상태 확인
 
-1. Keycloak은 로그인 및 토큰 발급을 담당하며, LDAP 사용자 연동은 OpenLDAP을 이용합니다.
-2. FastAPI는 Usage Event를 Kafka의 `usage-events` 토픽으로 발행합니다.
-3. Spark Structured Streaming은 Kafka 토픽을 읽어 이벤트 JSON을 스키마에 맞게 파싱합니다.
-4. 유효한 이벤트를 마이크로배치 단위로 처리하고 Iceberg 테이블에 추가합니다.
-5. Spark는 파이프라인 처리 상태를 `pipeline-status` 토픽으로 발행합니다.
-6. Iceberg는 테이블의 스냅샷과 메타데이터를 관리하며, 데이터 파일은 Parquet 형식으로 MinIO에 저장됩니다.
+프로젝트 루트(`03_dataplatform`)에서 실행합니다.
 
-## Iceberg와 MinIO 저장 구조
+```bash
+# Compose 설정 검증
+docker compose config
 
-웨어하우스는 `s3a://warehouse/` 경로를 사용합니다. Spark 카탈로그는 `local` HadoopCatalog로 구성되어 있으며, 테이블 예시는 `local.usage_db.usage_events`입니다.
+# 서비스 이미지 빌드 및 백그라운드 실행
+docker compose up -d --build
 
-개념적인 저장 구조는 다음과 같습니다.
-
-```text
-MinIO
-└── warehouse/
-    └── usage_db/
-        └── usage_events/
-            ├── data/
-            │   └── *.parquet
-            └── metadata/
-                ├── *.metadata.json
-                ├── snap-*.avro
-                └── manifest files
-```
-
-실제 파일명과 배치는 Iceberg 버전 및 쓰기 방식에 따라 달라질 수 있습니다.
-
-- **Parquet 파일**: 실제 이벤트 행 데이터
-- **Metadata JSON**: 테이블 스키마, 현재 메타데이터 및 스냅샷 참조
-- **Snapshot**: 특정 시점의 테이블 상태
-- **Manifest 파일**: 스냅샷에서 참조하는 데이터 파일 정보
-- **Checkpoint**: Spark Structured Streaming 작업의 진행 상태 복구에 사용
-
-## 프로젝트 디렉터리 확인
-
-하위 경로와 파일은 현재 체크아웃된 저장소를 기준으로 확인합니다.
-
-```powershell
-cd D:\data_platform\03_dataplatform
-
-Get-ChildItem
-Get-ChildItem -Recurse -File |
-  Select-Object -ExpandProperty FullName
-```
-
-Docker Compose에 등록된 서비스 확인:
-
-```powershell
-docker compose config --services
-```
-
-주요 설정과 코드 영역은 다음과 같습니다.
-
-- `docker-compose.yml`: 컨테이너, 네트워크, 포트, 환경변수 및 볼륨
-- `api/`: FastAPI 애플리케이션 및 API 관련 코드
-- `keycloak/`: Keycloak Realm 등 초기 설정
-- `openldap/`: LDAP 초기 설정 및 사용자 데이터
-- `spark/`: Spark 이미지, 공통 설정 및 스트리밍 처리 코드
-- `minio/`: MinIO 관련 설정 또는 이미지 빌드 파일
-
-실제 저장소에 존재하는 경로와 파일명은 위 명령으로 확인합니다.
-
-## 실행 및 상태 확인
-
-Docker Desktop이 실행 중인 상태에서 프로젝트 디렉터리로 이동합니다.
-
-```powershell
-docker compose config --services
-docker compose build
-docker compose up -d
+# 서비스 상태 확인
 docker compose ps
-```
 
-로그 확인:
+# 전체 로그 확인
+docker compose logs -f
 
-```powershell
-docker compose logs --tail=100
-docker compose logs -f spark
+# 특정 서비스 로그 확인
 docker compose logs -f api
-```
+docker compose logs -f frontend
+docker compose logs -f spark
+docker compose logs -f iceberg-query
+docker compose logs -f kafka
 
-`api`, `spark`는 Compose에 등록된 실제 서비스 이름과 일치하는지 확인한 뒤 사용합니다.
-
-서비스 종료:
-
-```powershell
+# 서비스 중지
 docker compose down
 ```
 
-일반 종료 시 `-v` 옵션을 사용하지 않으면 볼륨 데이터 보존에 유리합니다. `docker compose down -v`는 연결된 볼륨을 삭제할 수 있으므로 주의합니다.
+#### Default User 
+- ID : kim
+- PW : test1234
+- Roll : user, ldap-admin
 
-## Kafka 이벤트 확인
+### 접속 확인 순서
 
-프로젝트에서 사용하는 주요 토픽은 다음과 같습니다.
+1. [Keycloak](http://localhost:8080)에서 `hdaic` Realm 및 인증 설정을 확인합니다.
+2. [phpLDAPadmin](http://localhost:8081)에서 LDAP 디렉터리 구성을 확인합니다.
+3. [MinIO Console](http://localhost:9002)에서 `warehouse` 버킷과 객체를 확인합니다.
+4. [FastAPI Swagger UI](http://localhost:8000/docs)에서 백엔드 API를 확인합니다.
+5. [Frontend](http://localhost:3000)에서 파이프라인 상태를 확인합니다.
+6. [Time Travel UI](http://localhost:3000/time-travel)에서 Iceberg 스냅샷 이력을 확인하고 비교합니다.
 
-| 토픽 | 용도 |
-|---|---|
-| `usage-events` | 애플리케이션 Usage Event |
-| `pipeline-status` | 파이프라인 처리 단계 및 상태 |
+## 6. 환경 변수 및 보안 주의사항
 
-Kafka CLI 사용 예시입니다. Kafka 컨테이너 이름과 CLI 경로는 현재 이미지 구성에 맞춰 확인합니다.
+`.env` 파일에서 다음과 같은 서비스 자격 증명을 설정합니다.
 
-```powershell
-docker exec -it kafka /opt/kafka/bin/kafka-topics.sh `
-  --bootstrap-server kafka:9092 `
-  --list
-```
+- `LDAP_ADMIN_PASSWORD`
+- `LDAP_CONFIG_PASSWORD`
+- `KEYCLOAK_ADMIN_PASSWORD`
+- `MINIO_ROOT_PASSWORD`
 
-이벤트 확인:
+실제 비밀번호나 토큰을 README에 기록하거나 Git 저장소에 커밋하지 마세요. `.env`는 버전 관리 대상에서 제외하고, 저장소에는 `.env.example`을 제공하는 방식을 권장합니다.
 
-```powershell
-docker exec -it kafka /opt/kafka/bin/kafka-console-consumer.sh `
-  --bootstrap-server kafka:9092 `
-  --topic usage-events `
-  --from-beginning
-```
+## 7. 서비스 URL 요약
 
-Docker 내부 서비스끼리는 `kafka:9092`와 같은 Compose 서비스 주소를 사용합니다. Windows 호스트에서 실행하는 클라이언트는 Compose에 공개된 호스트 포트를 사용해야 합니다.
-
-## 현재 프로젝트에서 다루는 핵심 개념
-
-- LDAP의 DN, DC, OU, CN, UID와 사용자 디렉터리
-- Keycloak Realm, Client, JWT 및 LDAP 연동
-- Kafka Producer/Consumer와 토픽 기반 이벤트 전달
-- Spark Structured Streaming, 마이크로배치 및 체크포인트
-- Python JSON 파싱과 이벤트 스키마 정규화
-- Iceberg 테이블, 스냅샷, 메타데이터 및 데이터 파일
-- MinIO의 S3 호환 저장 구조
-- 파이프라인 상태 이벤트와 로그를 통한 처리 결과 확인
-
-## 프로젝트 요약
-
-```text
-인증
-OpenLDAP + Keycloak
-        │
-애플리케이션
-FastAPI / 웹 UI
-        │
-이벤트 전달
-Kafka
-        │
-스트리밍 처리
-Spark Structured Streaming
-        │
-테이블 관리
-Apache Iceberg
-        │
-객체 저장
-MinIO (Parquet + Iceberg metadata)
-```
-
-이 프로젝트는 위 데이터 흐름을 직접 실행하고 각 구성 요소의 역할과 데이터 저장 구조를 확인하기 위한 실습 환경입니다.
+- Frontend: http://localhost:3000
+- Time Travel UI: http://localhost:3000/time-travel
+- FastAPI Swagger: http://localhost:8000/docs
+- Keycloak: http://localhost:8080
+- phpLDAPadmin: http://localhost:8081
+- MinIO API: http://localhost:9000
+- MinIO Console: http://localhost:9002
+- OpenLDAP: `localhost:389` (LDAP 클라이언트로 접속)
+- Kafka: `localhost:9092` (Kafka 클라이언트로 접속)
