@@ -53,12 +53,9 @@ Kafka, Spark Structured Streaming, Apache Iceberg, MinIO, FastAPI, Next.js, Keyc
 |---|---|---|
 | Next.js Frontend | [http://localhost:3000](http://localhost:3000) | 파이프라인 모니터링 및 데이터 플랫폼 UI |
 | Iceberg Time Travel UI | [http://localhost:3000/time-travel](http://localhost:3000/time-travel) | Iceberg 스냅샷 조회 및 비교 UI |
-| FastAPI | [http://localhost:8000](http://localhost:8000) | 백엔드 REST API |
 | FastAPI Swagger UI | [http://localhost:8000/docs](http://localhost:8000/docs) | REST API 문서 및 테스트 |
-| FastAPI ReDoc | [http://localhost:8000/redoc](http://localhost:8000/redoc) | REST API 문서 |
 | Keycloak | [http://localhost:8080](http://localhost:8080) | 로그인, Realm 및 사용자 인증 관리 |
 | phpLDAPadmin | [http://localhost:8081](http://localhost:8081) | OpenLDAP 디렉터리 관리 UI |
-| MinIO API | [http://localhost:9000](http://localhost:9000) | S3 호환 객체 스토리지 API |
 | MinIO Console | [http://localhost:9002](http://localhost:9002) | 객체 스토리지 관리 UI |
 
 ### 브라우저에서 직접 접속할 수 없는 내부 서비스
@@ -143,6 +140,8 @@ Compose 설정상 각 토픽은 파티션 3개, 복제 계수 1로 생성됩니�
 ## 5. 실행 및 상태 확인
 
 프로젝트 루트(`03_dataplatform`)에서 실행합니다.
+
+- .env-example 파일을 .env 파일로 변경후 실행
 
 ```bash
 # Compose 설정 검증
