@@ -2,6 +2,12 @@
 
 Kafka, Spark Structured Streaming, Apache Iceberg, MinIO, FastAPI, Next.js, Keycloak, OpenLDAP을 Docker Compose로 연동하는 데이터 플랫폼 실습 프로젝트입니다.
 
+
+
+https://github.com/user-attachments/assets/e8df8fb3-5691-4bd1-ba4d-3429937f1359
+
+
+
 ## 1. 프로젝트 구조
 
 ```text
