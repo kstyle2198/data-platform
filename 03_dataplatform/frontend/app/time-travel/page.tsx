@@ -367,7 +367,27 @@ export default function TimeTravelPage() {
   const historicalSnapshots = snapshots.filter((snapshot) => !snapshot.is_current).length;
 
   return (
-    <main style={styles.page}>
+    <main className="app-shell time-travel-app-shell">
+      <aside className="sidebar" aria-label="주 메뉴">
+        <a href="/" className="brand" style={{ textDecoration: "none", color: "inherit" }}>
+          <div className="brand-mark">DP</div>
+          <div>
+            <strong>Data Platform</strong>
+            <span>Operations Console</span>
+          </div>
+        </a>
+
+        <p className="nav-label">MONITORING</p>
+        <a href="/" className="nav-item">Pipeline &amp; Kafka Monitoring</a>
+        <a href="/pipeline-lab" className="nav-item">Pipeline Learning Lab</a>
+        <a href="/time-travel" className="nav-item active" aria-current="page">Iceberg Time Travel</a>
+
+        <p className="nav-label">WORKSPACE</p>
+        <a href="/identity/ldap" className="nav-item">OpenLDAP Users</a>
+      </aside>
+
+      <section className="time-travel-main">
+      <div style={styles.page}>
       <div style={styles.container}>
         <header style={styles.header}>
           <div>
@@ -377,12 +397,17 @@ export default function TimeTravelPage() {
               스냅샷을 선택하고 특정 시점의 테이블 데이터를 조회합니다.
             </p>
           </div>
-          <a
-            href="/"
-            style={{ ...styles.secondaryButton, textDecoration: "none", padding: "11px 15px" }}
-          >
-            <span aria-hidden="true">←</span> 메인 모니터
-          </a>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <a href="/" style={{ ...styles.secondaryButton, textDecoration: "none", padding: "11px 15px" }}>
+              Pipeline Flow
+            </a>
+            <a href="/monitoring/kafka" style={{ ...styles.secondaryButton, textDecoration: "none", padding: "11px 15px" }}>
+              Kafka Processing
+            </a>
+            <a href="/time-travel" aria-current="page" style={{ ...styles.secondaryButton, textDecoration: "none", padding: "11px 15px", background: "#eef0ff", borderColor: "#cdd2ff" }}>
+              Iceberg Time Travel
+            </a>
+          </div>
         </header>
 
         {(error || message) && (
@@ -752,6 +777,8 @@ export default function TimeTravelPage() {
           )}
         </section>
       </div>
+      </div>
+      </section>
     </main>
   );
 }

@@ -21,6 +21,28 @@ type PipelineEvent = {
   minio?: { status?: string };
 };
 
+type KafkaPartition = {
+  partition: number;
+  leader: number | null;
+  replicas: number[];
+  isr: number[];
+  beginning_offset: number | null;
+  latest_offset: number | null;
+  log_size: number | null;
+};
+
+type KafkaTopic = {
+  topic: string;
+  partition_count: number;
+  partitions: KafkaPartition[];
+};
+
+type KafkaConsumerGroup = {
+  group_id: string;
+  protocol_type: string;
+  state: string;
+};
+
 type LdapUser = {
   username: string;
   full_name: string;
@@ -108,7 +130,12 @@ export default function Home() {
   const [events, setEvents] = useState<PipelineEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState("");
   const [pipelineDetail, setPipelineDetail] = useState<PipelineEvent | null>(null);
-  const [parquet, setParquet] = useState<Record<string, unknown> | null>(null);
+  const [kafkaTopics, setKafkaTopics] = useState<KafkaTopic[]>([]);
+  const [consumerGroups, setConsumerGroups] = useState<KafkaConsumerGroup[]>([]);
+  const [selectedTopic, setSelectedTopic] = useState("");
+  const [kafkaFilter, setKafkaFilter] = useState("");
+  const [kafkaError, setKafkaError] = useState("");
+  const [kafkaUpdatedAt, setKafkaUpdatedAt] = useState("");
 
   const [ldapUsers, setLdapUsers] = useState<LdapUser[]>([]);
   const [newUser, setNewUser] = useState({
@@ -133,7 +160,6 @@ export default function Home() {
     setEvents([]);
     setSelectedEvent("");
     setPipelineDetail(null);
-    setParquet(null);
     setLdapUsers([]);
     setMessage("로그아웃했습니다.");
     setError("");
@@ -146,7 +172,7 @@ export default function Home() {
       const [me, pipeline] = await Promise.all([
         request<User>("/me", activeToken),
         request<{ count: number; events: PipelineEvent[] }>(
-          "/pipeline?limit=20",
+          "/pipeline?limit=100",
           activeToken
         )
       ]);
@@ -163,7 +189,7 @@ export default function Home() {
           );
           setPipelineDetail(detail);
         } catch {
-          // 선택된 이벤트가 최근 상태 목록에서 사라졌을 수 있음
+          // 선택된 이벤트의 상세 정보가 더 이상 조회되지 않을 수 있음
         }
       }
     } catch (e) {
@@ -174,7 +200,37 @@ export default function Home() {
         sessionStorage.removeItem("access_token");
         setToken("");
         setUser(null);
+        return;
       }
+    }
+
+    // Kafka 조회 실패가 Pipeline 상태 조회까지 중단시키지 않도록 분리합니다.
+    try {
+      const [topicData, groupData] = await Promise.all([
+        request<{ count?: number; topics: KafkaTopic[] }>(
+          "/monitoring/kafka/topics",
+          activeToken
+        ),
+        request<{ count?: number; groups: KafkaConsumerGroup[] }>(
+          "/monitoring/kafka/consumer-groups",
+          activeToken
+        )
+      ]);
+
+      const nextTopics = topicData.topics || [];
+      setKafkaTopics(nextTopics);
+      setConsumerGroups(groupData.groups || []);
+      setSelectedTopic((current) =>
+        current && nextTopics.some((topic) => topic.topic === current)
+          ? current
+          : ""
+      );
+      setKafkaUpdatedAt(new Date().toLocaleTimeString());
+      setKafkaError("");
+    } catch (e) {
+      setKafkaError(
+        e instanceof Error ? e.message : "Kafka 모니터링 조회 실패"
+      );
     }
   }, [selectedEvent]);
 
@@ -263,25 +319,6 @@ export default function Home() {
       setPipelineDetail(detail);
     } catch (e) {
       setError(e instanceof Error ? e.message : "파이프라인 조회 실패");
-    }
-  }
-
-  async function loadParquet(eventId?: string) {
-    setBusy(true);
-    setError("");
-
-    try {
-      const path = eventId
-        ? `/iceberg/parquet/${encodeURIComponent(eventId)}?limit=100`
-        : "/iceberg/parquet?limit=50";
-
-      const result = await request<Record<string, unknown>>(path, token);
-      setParquet(result);
-      setMessage("Parquet 데이터를 조회했습니다.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Parquet 조회 실패");
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -389,15 +426,16 @@ export default function Home() {
           </div>
         </div>
 
+        <p className="nav-label">MONITORING</p>
+        <a href="/" className="nav-item active">Pipeline & Kafka Monitoring</a>
+        <a href="/pipeline-lab" className="nav-item">Pipeline Learning Lab</a>
+        <a href="/time-travel" className="nav-item">Iceberg Time Travel</a>
+
         <p className="nav-label">WORKSPACE</p>
-        <a href="#overview" className="nav-item active">Overview</a>
+        <a href="#overview" className="nav-item">Overview</a>
         <a href="#usage" className="nav-item">Usage Events</a>
         <a href="#pipeline" className="nav-item">Pipeline Status</a>
-        <a href="#storage" className="nav-item">Parquet Data</a>
-        
-        {isAdmin && <a href="#ldap" className="nav-item">LDAP Users</a>}
-
-        <a href="/time-travel">Iceberg Time Travel</a>
+        {isAdmin && <a href="/identity/ldap" className="nav-item">OpenLDAP Users</a>}
 
         <div className="sidebar-bottom">
           <div className="user-avatar">
@@ -417,7 +455,7 @@ export default function Home() {
         <header className="topbar">
           <div>
             <p className="eyebrow">OBSERVABILITY / DATA ENGINEERING</p>
-            <h1>Usage Data Pipeline</h1>
+            <h1>Pipeline & Kafka Monitoring</h1>
           </div>
           <div className="topbar-right">
             <span className="live-indicator">● LIVE</span>
@@ -580,14 +618,11 @@ export default function Home() {
                       <button className="text-button" onClick={() => void inspectEvent(event.event_id)}>
                         상세
                       </button>
-                      <button className="text-button" onClick={() => void loadParquet(event.event_id)}>
-                        데이터
-                      </button>
                     </td>
                   </tr>
                 ))}
                 {events.length === 0 && (
-                  <tr><td colSpan={7} className="empty">표시할 이벤트가 없습니다.</td></tr>
+                  <tr><td colSpan={8} className="empty">표시할 이벤트가 없습니다.</td></tr>
                 )}
               </tbody>
             </table>
@@ -695,126 +730,89 @@ export default function Home() {
 )}
 
 
-        <section id="storage" className="panel">
+
+
+
+        <section id="kafka" className="panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">ICEBERG / MINIO</p>
-              <h2>Parquet Data Explorer</h2>
+              <p className="eyebrow">KAFKA / BROKER METADATA</p>
+              <h2>Kafka Topics & Partitions</h2>
+              <p className="muted small">최근 갱신: {kafkaUpdatedAt || "-"} · 5초 간격 자동 갱신</p>
             </div>
-            <div className="button-row">
-              <button className="secondary" disabled={busy} onClick={() => void loadParquet()}>
-                최근 데이터
-              </button>
-              <button
-                className="secondary"
-                disabled={busy || !selectedEvent}
-                onClick={() => void loadParquet(selectedEvent)}
-              >
-                선택 이벤트 데이터
-              </button>
-            </div>
+            <label>
+              토픽 필터
+              <select value={selectedTopic} onChange={(e) => setSelectedTopic(e.target.value)} aria-label="Kafka 토픽 선택">
+                <option value="">전체 토픽</option>
+                {kafkaTopics.map((topic) => <option key={topic.topic} value={topic.topic}>{topic.topic}</option>)}
+              </select>
+            </label>
           </div>
 
-          {parquet ? (
-            <>
-              <div className="metadata-grid">
-                {["bucket", "prefix", "files_scanned", "row_count"].map((key) => (
-                  <div className="metadata-card" key={key}>
-                    <span>{key}</span>
-                    <strong>{String(parquet[key] ?? "-")}</strong>
-                  </div>
+          {kafkaError && <div className="alert error">{`Kafka 모니터링: ${kafkaError}`}</div>}
+
+          <div className="metrics-grid">
+            <article className="metric-card"><span className="metric-label">Kafka Topics</span><strong className="metric-value">{kafkaTopics.length}</strong><span className="metric-note">내부 토픽 제외</span></article>
+            <article className="metric-card"><span className="metric-label">Partitions</span><strong className="metric-value">{kafkaTopics.reduce((sum, topic) => sum + topic.partition_count, 0)}</strong><span className="metric-note">조회된 파티션 합계</span></article>
+            <article className="metric-card"><span className="metric-label">Log Size</span><strong className="metric-value">{kafkaTopics.filter((topic) => !selectedTopic || topic.topic === selectedTopic).reduce((sum, topic) => sum + topic.partitions.reduce((n, part) => n + (part.log_size ?? 0), 0), 0).toLocaleString()}</strong><span className="metric-note">Beginning 대비 Latest 오프셋 범위</span></article>
+            <article className="metric-card"><span className="metric-label">Consumer Groups</span><strong className="metric-value">{consumerGroups.length}</strong><span className="metric-note">브로커에서 조회한 그룹</span></article>
+          </div>
+
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Topic</th><th>Partition</th><th>Leader</th><th>Replicas</th><th>ISR</th><th>Beginning</th><th>Latest</th><th>Log Size</th></tr></thead>
+              <tbody>
+                {kafkaTopics.filter((topic) => !selectedTopic || topic.topic === selectedTopic).flatMap((topic) => topic.partitions.map((part) => (
+                  <tr key={`${topic.topic}-${part.partition}`}><td className="mono">{topic.topic}</td><td>{part.partition}</td><td>{part.leader ?? "-"}</td><td>{part.replicas.join(", ") || "-"}</td><td>{part.isr.join(", ") || "-"}</td><td>{part.beginning_offset ?? "-"}</td><td>{part.latest_offset ?? "-"}</td><td>{part.log_size?.toLocaleString() ?? "-"}</td></tr>
+                )))}
+                {kafkaTopics.filter((topic) => !selectedTopic || topic.topic === selectedTopic).length === 0 && <tr><td colSpan={8} className="empty">표시할 Kafka 토픽이 없습니다.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Consumer Groups</h3>
+          <p className="muted small">그룹 메타데이터만으로 Consumer Lag을 확정할 수 없습니다. 커밋 오프셋 기반 Lag은 별도 지표입니다.</p>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Group ID</th><th>Protocol Type</th><th>State</th></tr></thead>
+              <tbody>
+                {consumerGroups.map((group) => <tr key={group.group_id}><td className="mono">{group.group_id}</td><td>{group.protocol_type || "-"}</td><td>{group.state || "unknown"}</td></tr>)}
+                {consumerGroups.length === 0 && <tr><td colSpan={3} className="empty">조회된 Consumer Group이 없습니다.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Kafka 관련 파이프라인 이벤트</h3>
+          <div className="panel-heading">
+            <p className="muted small">최근 파이프라인 이벤트에서 Kafka 토픽과 오프셋을 함께 확인합니다.</p>
+            <input value={kafkaFilter} onChange={(e) => setKafkaFilter(e.target.value)} placeholder="Event ID 또는 Topic 검색" aria-label="Kafka 이벤트 검색" />
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Event ID</th><th>Created At</th><th>Topic</th><th>Partition</th><th>Offset</th><th>FastAPI</th><th>Spark</th><th>Iceberg</th><th>MinIO</th></tr></thead>
+              <tbody>
+                {events.filter((event) => {
+                  const query = kafkaFilter.trim().toLowerCase();
+                  return (!selectedTopic || event.kafka?.topic === selectedTopic) && (!query || event.event_id.toLowerCase().includes(query) || (event.kafka?.topic || "").toLowerCase().includes(query));
+                }).map((event) => (
+                  <tr key={event.event_id}>
+                    <td className="mono">{event.event_id.slice(0, 12)}…</td>
+                    <td>{event.created_at ? new Date(event.created_at).toLocaleTimeString() : "-"}</td>
+                    <td>{event.kafka?.topic || "-"}</td><td>{event.kafka?.partition ?? "-"}</td><td>{event.kafka?.offset ?? "-"}</td>
+                    <td><span className={statusClass(event.fastapi?.status)}>{statusLabel(event.fastapi?.status)}</span></td>
+                    <td><span className={statusClass(event.spark?.status)}>{statusLabel(event.spark?.status)}</span></td>
+                    <td><span className={statusClass(event.iceberg?.status)}>{statusLabel(event.iceberg?.status)}</span></td>
+                    <td><span className={statusClass(event.minio?.status)}>{statusLabel(event.minio?.status)}</span></td>
+                  </tr>
                 ))}
-              </div>
-              <h3>Parquet Rows / Metadata</h3>
-              <pre className="json-view">{pretty(parquet)}</pre>
-            </>
-          ) : (
-            <p className="muted">조회 버튼을 눌러 MinIO에 저장된 Parquet 데이터를 확인하세요.</p>
-          )}
+                {events.filter((event) => {
+                  const query = kafkaFilter.trim().toLowerCase();
+                  return (!selectedTopic || event.kafka?.topic === selectedTopic) && (!query || event.event_id.toLowerCase().includes(query) || (event.kafka?.topic || "").toLowerCase().includes(query));
+                }).length === 0 && <tr><td colSpan={9} className="empty">조건에 맞는 이벤트가 없습니다.</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </section>
-
-        {isAdmin && (
-          <section id="ldap" className="panel">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">IDENTITY MANAGEMENT</p>
-                <h2>OpenLDAP 사용자 관리</h2>
-                <p className="muted small">ldap-admin 역할이 있는 사용자만 이용할 수 있습니다.</p>
-              </div>
-              <button className="secondary" disabled={busy} onClick={() => void loadLdapUsers()}>
-                사용자 목록 조회
-              </button>
-            </div>
-
-            <form className="ldap-form" onSubmit={createLdapUser}>
-              <label>
-                Username
-                <input
-                  value={newUser.username}
-                  onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                  minLength={3}
-                  required
-                />
-              </label>
-              <label>
-                이름
-                <input
-                  value={newUser.full_name}
-                  onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
-                  required
-                />
-              </label>
-              <label>
-                이메일
-                <input
-                  type="email"
-                  value={newUser.email}
-                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  required
-                />
-              </label>
-              <label>
-                부서
-                <input
-                  value={newUser.department}
-                  onChange={(e) => setNewUser({ ...newUser, department: e.target.value })}
-                />
-              </label>
-              <label>
-                초기 비밀번호
-                <input
-                  type="password"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  minLength={1}
-                  required
-                />
-              </label>
-              <button className="primary" disabled={busy}>LDAP 사용자 등록</button>
-            </form>
-
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr><th>Username</th><th>이름</th><th>이메일</th><th>부서</th></tr>
-                </thead>
-                <tbody>
-                  {ldapUsers.map((item) => (
-                    <tr key={item.username}>
-                      <td>{item.username}</td>
-                      <td>{item.full_name}</td>
-                      <td>{item.email}</td>
-                      <td>{item.department || "-"}</td>
-                    </tr>
-                  ))}
-                  {ldapUsers.length === 0 && (
-                    <tr><td colSpan={4} className="empty">사용자 목록을 조회하세요.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
 
         <footer className="footer">
           Data Platform Monitor · Next.js Frontend · FastAPI Backend

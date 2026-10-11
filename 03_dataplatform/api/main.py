@@ -31,7 +31,8 @@ from fastapi.security import (
 
 from jose import jwt
 from jose.exceptions import JWTError
-from kafka import KafkaConsumer, KafkaProducer
+from kafka import KafkaConsumer, KafkaProducer, TopicPartition
+from kafka.admin import KafkaAdminClient
 from pydantic import BaseModel, Field
 from minio import Minio
 from minio.error import S3Error
@@ -1574,3 +1575,248 @@ async def iceberg_clear(
             detail="Confirmation text does not match",
         )
     return await request_iceberg_clear(confirmation)
+
+
+@app.post("/learning/reset", tags=["Pipeline Learning"])
+async def reset_pipeline_learning(user=Depends(get_current_user)):
+    """Clear in-memory pipeline status and current Iceberg rows for the learning lab.
+
+    Kafka is intentionally not truncated here: deleting active topics can break the
+    running Spark Structured Streaming query/checkpoint. Iceberg snapshot history is
+    preserved by the table DELETE operation.
+    """
+    if not has_data_admin_role(user):
+        raise HTTPException(status_code=403, detail="Administrator role required")
+
+    # Clear the Iceberg current table first. If this fails, keep API pipeline state.
+    iceberg_result = await request_iceberg_clear("DELETE ALL ROWS")
+    with pipeline_status_lock:
+        cleared_pipeline_events = len(pipeline_status)
+        pipeline_status.clear()
+
+    return {
+        "message": "Pipeline Learning 상태와 Iceberg 현재 데이터를 초기화했습니다.",
+        "cleared_pipeline_events": cleared_pipeline_events,
+        "iceberg": iceberg_result,
+        "kafka_messages_preserved": True,
+        "iceberg_snapshot_history_preserved": True,
+        "notes": [
+            "Kafka 토픽 로그는 실행 중인 Spark 스트리밍에 영향을 주지 않도록 보존했습니다.",
+            "Iceberg DELETE는 새 스냅샷을 만들며 이전 스냅샷의 Time Travel 기록은 유지됩니다.",
+        ],
+    }
+
+
+# ============================================================
+# Kafka Monitoring APIs
+# ============================================================
+
+@app.get("/monitoring/kafka/topics", tags=["Kafka Processing"])
+async def list_kafka_topics(user=Depends(get_current_user)):
+    """Return topic, partition, and offset metadata for the learning UI."""
+    admin = None
+    consumer = None
+    try:
+        admin = KafkaAdminClient(
+            bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+            client_id="usage-api-monitoring",
+            request_timeout_ms=5000,
+        )
+        # kafka-python 3.0.11: describe_topics returns a list of dictionaries.
+        topic_metadata_list = admin.describe_topics()
+        consumer = KafkaConsumer(
+            bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+            client_id="usage-api-topic-inspector",
+            enable_auto_commit=False,
+            request_timeout_ms=5000,
+        )
+
+        topics = []
+        for topic_metadata in topic_metadata_list:
+            topic_name = topic_metadata.get("name")
+            if not topic_name or topic_name.startswith("__"):
+                continue
+            if topic_metadata.get("error", 0) not in (None, 0):
+                continue
+
+            # partition_metadata = topic_metadata.get("partitions", [])
+            # partition_map = {
+            #     item["partition"]: item
+            #     for item in partition_metadata
+            #     if "partition" in item and item.get("error", 0) in (None, 0)
+            # }
+            # partition_ids = sorted(partition_map)
+            # partitions = []
+            # if partition_ids:
+            #     topic_partitions = [
+            #         TopicPartition(topic_name, pid) for pid in partition_ids
+            #     ]
+            #     beginnings = consumer.beginning_offsets(topic_partitions)
+            #     ends = consumer.end_offsets(topic_partitions)
+            #     for pid in partition_ids:
+            #         tp = TopicPartition(topic_name, pid)
+            #         part = partition_map[pid]
+            #         beginning = beginnings.get(tp)
+            #         latest = ends.get(tp)
+            #         log_size = (
+            #             max(0, latest - beginning)
+            #             if beginning is not None and latest is not None
+            #             else None
+            #         )
+            #         partitions.append({
+            #             "partition": pid,
+            #             "leader": part.get("leader"),
+            #             "replicas": part.get("replicas", []) or [],
+            #             "isr": part.get("isr", []) or [],
+            #             "beginning_offset": beginning,
+            #             "latest_offset": latest,
+            #             "log_size": log_size,
+            #         })
+            # topics.append({
+            #     "topic": topic_name,
+            #     "partition_count": len(partitions),
+            #     "partitions": partitions,
+            # })
+        
+            partition_metadata = topic_metadata.get("partitions", [])
+            partition_map = {}
+
+            # Kafka 클라이언트 버전에 따른 필드명 차이를 처리
+            for item in partition_metadata:
+                error_code = item.get(
+                    "error_code",
+                    item.get("error", 0),
+                )
+
+                if error_code not in (None, 0):
+                    continue
+
+                partition_id = item.get(
+                    "partition",
+                    item.get("partition_index"),
+                )
+
+                if partition_id is None:
+                    continue
+
+                partition_map[partition_id] = item
+
+            partition_ids = sorted(partition_map)
+            partitions = []
+
+            if partition_ids:
+                topic_partitions = [
+                    TopicPartition(topic_name, pid)
+                    for pid in partition_ids
+                ]
+
+                beginnings = consumer.beginning_offsets(
+                    topic_partitions
+                )
+                ends = consumer.end_offsets(
+                    topic_partitions
+                )
+
+                for pid in partition_ids:
+                    tp = TopicPartition(topic_name, pid)
+                    part = partition_map[pid]
+
+                    beginning = beginnings.get(tp)
+                    latest = ends.get(tp)
+
+                    log_size = (
+                        max(0, latest - beginning)
+                        if beginning is not None
+                        and latest is not None
+                        else None
+                    )
+
+                    partitions.append({
+                        "partition": pid,
+                        "leader": part.get(
+                            "leader",
+                            part.get("leader_id"),
+                        ),
+                        "replicas": part.get(
+                            "replicas",
+                            part.get("replica_nodes", []),
+                        ) or [],
+                        "isr": part.get(
+                            "isr",
+                            part.get("isr_nodes", []),
+                        ) or [],
+                        "beginning_offset": beginning,
+                        "latest_offset": latest,
+                        "log_size": log_size,
+                    })
+
+            topics.append({
+                "topic": topic_name,
+                "partition_count": len(partitions),
+                "partitions": partitions,
+            })
+
+        topics.sort(key=lambda item: item["topic"])
+        return {
+            "bootstrap_servers": KAFKA_BOOTSTRAP_SERVERS,
+            "count": len(topics),
+            "topics": topics,
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Kafka metadata unavailable: {type(exc).__name__}: {exc}",
+        )
+    finally:
+        if consumer is not None:
+            try:
+                consumer.close(autocommit=False)
+            except Exception:
+                pass
+        if admin is not None:
+            try:
+                admin.close()
+            except Exception:
+                pass
+
+
+@app.get("/monitoring/kafka/consumer-groups", tags=["Kafka Processing"])
+async def list_kafka_consumer_groups(user=Depends(get_current_user)):
+    """Return Kafka consumer group metadata."""
+    admin = None
+    try:
+        admin = KafkaAdminClient(
+            bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+            client_id="usage-api-group-inspector",
+            request_timeout_ms=5000,
+        )
+        groups = admin.list_groups()
+        items = []
+        for group in groups:
+            if isinstance(group, dict):
+                group_id = group.get("group", "")
+                protocol_type = group.get("protocol_type", "")
+                state = group.get("group_state", "unknown")
+            else:
+                group_id = getattr(group, "group", "")
+                protocol_type = getattr(group, "protocol_type", "")
+                state = getattr(group, "group_state", "unknown")
+            if group_id:
+                items.append({
+                    "group_id": group_id,
+                    "protocol_type": protocol_type,
+                    "state": state or "unknown",
+                })
+        items.sort(key=lambda item: item["group_id"])
+        return {"count": len(items), "groups": items}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Kafka consumer groups unavailable: {type(exc).__name__}: {exc}",
+        )
+    finally:
+        if admin is not None:
+            try:
+                admin.close()
+            except Exception:
+                pass
